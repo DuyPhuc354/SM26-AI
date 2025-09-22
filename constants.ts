@@ -312,6 +312,51 @@ export const communityTactics: DetailedTactic[] = [
       attackInstructions: "Passing: Direct; Attacking: Down Both Flanks; Forwards: Shoot on sight; Wide Play: Cut inside; Build up: Fast; Counter: Yes",
       defenceInstructions: "Pressing: All Over; Tackling: Aggressive; Back Line: High; Sweeper Keeper: Yes; Time Wasting: Low",
       bestForTips: "A meta tactic from the Vietnamese SM community. Extremely aggressive and high-scoring. Relies on non-stop pressure and fast wingers."
+    },
+    { 
+      tacticName: "Korean Firepower 4-2-2-2",
+      formation: "4-2-2-2",
+      keyRoles: "GK: Modern Keeper; DC: Ball-playing (x2); DL/DR: Wingback; DMC: Box-to-box/Ball-winning; AMC: Advanced Playmaker (x2); FC: Finisher/Deep-lying Forward",
+      generalInstructions: "Width: Narrow; Mentality: Attacking; Tempo: Fast; Fluidity: Adventurous; Work Rate: Fast; Creativity: Bold",
+      attackInstructions: "Passing: Mixed; Attacking: Through the Middle; Forwards: Work ball into box; Wide Play: Mixed; Build up: Fast; Counter: Yes",
+      defenceInstructions: "Pressing: All Over; Tackling: Aggressive; Back Line: High; Sweeper Keeper: Yes; Time Wasting: Low",
+      bestForTips: "Inspired by the Korean SM community. Relies on quick, short passing between the front four to overwhelm central defenses. Wingbacks must have high stamina."
+    },
+    { 
+      tacticName: "Spanish Inquisition 4-1-4-1",
+      formation: "4-1-4-1",
+      keyRoles: "GK: Modern Keeper; DC: Ball-playing (x2); DL/DR: Fullback (support); DMC: Deep-lying Playmaker; MC: Advanced Playmaker/Playmaker; ML/MR: Winger (support); FC: Deep-lying Forward",
+      generalInstructions: "Width: Wide; Mentality: Normal; Tempo: Slow; Fluidity: Adventurous; Work Rate: Normal; Creativity: Bold",
+      attackInstructions: "Passing: Short; Attacking: Mixed; Forwards: Work ball into box; Wide Play: Mixed; Build up: Slow; Counter: No",
+      defenceInstructions: "Pressing: All Over; Tackling: Normal; Back Line: V.High; Sweeper Keeper: Yes; Time Wasting: Low",
+      bestForTips: "For technically elite teams aiming for 70%+ possession. A patient approach that requires high passing and creativity attributes across the midfield."
+    },
+    { 
+      tacticName: "Samba Magic 4-2-3-1 Deep",
+      formation: "4-2-3-1",
+      keyRoles: "GK: Modern Keeper; DC: Stopper/Ball-playing; DL/DR: Wingback; DMC: Deep-lying Playmaker/Ball-winning; AMC: Advanced Playmaker; AML/AMR: Wide Forward; FC: Finisher",
+      generalInstructions: "Width: Wide; Mentality: Attacking; Tempo: Normal; Fluidity: Adventurous; Work Rate: Normal; Creativity: Bold",
+      attackInstructions: "Passing: Mixed; Attacking: Mixed; Forwards: Work ball into box; Wide Play: Mixed; Build up: Normal; Counter: Yes",
+      defenceInstructions: "Pressing: Own Half; Tackling: Normal; Back Line: Normal; Sweeper Keeper: Yes; Time Wasting: Normal",
+      bestForTips: "Unlocks defenses with creative freedom. Perfect for teams with technically gifted players in attacking positions who can create something out of nothing."
+    },
+    {
+      tacticName: "Best Tactic",
+      formation: "4-3-3",
+      keyRoles: "GK: Keeper; DML: Fullback; DC: Stopper; DC: Ball-playing defender; DMR: Fullback; DMC: Deep-lying playmaker; MC: General Midfielder; MC: Playmaker; AML: Advanced Playmaker; FC: Target Man; AMR: Advanced Playmaker",
+      generalInstructions: "Width: Narrow; Mentality: Normal; Tempo: Fast; Fluidity: Normal; Work Rate: Fast; Creativity: Balanced",
+      attackInstructions: "Passing Style: Mixed; Attacking Style: Mixed; Forwards: Shoot on sight; Wide Play: Play early crosses; Build Up: Normal; Counter Attack: No",
+      defenceInstructions: "Pressing: All Over; Tackling Style: Aggressive; Back Line: Normal; Sweeper Keeper: No; Time Wasting: Normal",
+      bestForTips: "This tactical setup is designed to fully leverage the SM26 meta, which heavily favors fast-paced, high-pressure football. The squad composition perfectly fits a 4-3-3 formation, allowing for a strong attacking overload while maintaining defensive solidity. The two DCs are complemented by DML and DMR Wingbacks, providing width in attack and defensive cover. The DMC acts as a Deep-lying playmaker, dictating tempo, supported by a Box-to-box midfielder for energy and an Advanced playmaker to link with the attack. The AML and AMR are set as Wide Forwards, encouraging them to cut inside and contribute to scoring, aligning with the meta's emphasis on wingers who can do so. The central FC as a Finisher is ideal for converting the numerous chances created by this aggressive system.\n\nThe 'Attacking' mentality, 'Fast' tempo, and 'Adventurous' fluidity are chosen to promote a relentless, forward-thinking approach, directly in line with the SM26 engine's preference for rapid play. 'Direct' passing style, combined with 'Fast' build-up and 'true' counter-attack, ensures quick transitions and capitalizes on the meta's favorability towards rapid counter-attacks. 'Shoot on sight' for forwards and 'Play early crosses' for wide play further enhance the directness and goal threat. Defensively, an 'All Over' pressing scheme with 'Aggressive' tackling and a 'High' back line, supported by a 'Sweeper Keeper', creates an intense, suffocating press that aims to win the ball back high up the pitch, another core tenet of the SM26 meta. 'Low' time wasting ensures the team maintains its high tempo throughout the match. This comprehensive approach maximizes the team's strengths and exploits the game engine's mechanics for optimal performance."
+    },
+    {
+      tacticName: "Jun Phạm Tactic",
+      formation: "4-2-3-1",
+      keyRoles: "GK: Keeper; DML: Wingback; DC: Stopper; DC: General Defender; DMR: Fullback; MC: General Midfielder; MC: Playmaker; AML: Winger; AMC: Advanced Playmaker; AMR: Winger; FC: Target Man",
+      generalInstructions: "Width: Narrow; Mentality: V.Attacking; Tempo: Fast; Fluidity: Adventurous; Work Rate: Fast; Creativity: Bold",
+      attackInstructions: "Passing Style: Mixed; Attacking Style: Through the Middle; Forwards: Work ball into box; Wide Play: Mixed; Build Up: Fast; Counter Attack: Yes",
+      defenceInstructions: "Pressing: All Over; Tackling Style: Aggressive; Back Line: High; Sweeper Keeper: No; Time Wasting: Low",
+      bestForTips: "This tactical setup is designed to fully leverage the SM26 meta, which heavily favors fast-paced, high-pressure, attacking football. The chosen 4-2-3-1 formation perfectly accommodates your squad composition (GK, 2 DC, 1 DML, 1 DMR, 2 MC, 1 AMC, 1 AML, 1 AMR, 1 ST) and is explicitly mentioned as an 'extremely effective' formation for overloading the attack. The DML and DMR are deployed as Wingbacks to provide width and support the attack, aligning with the fast tempo and direct passing style. In midfield, one Ball-winning midfielder will aid in aggressive 'All Over' pressing, while an Advanced Playmaker MC will facilitate quick transitions and direct passes. The AMC, AML, and AMR form a potent attacking trio behind the Finisher FC, with the Wide Forwards (AML/AMR) specifically chosen for their ability to 'cut inside', a key success factor highlighted in the meta. The Finisher FC is ideal for capitalizing on the numerous chances created by this attacking setup. General instructions like 'Attacking' mentality, 'Fast' tempo, 'Adventurous' fluidity, 'Fast' work rate, and 'Bold' creativity are all geared towards an aggressive, proactive style. Attacking instructions emphasize 'Direct' passing, 'Down Both Flanks' attacking style (to utilize the wide forwards and wingbacks), 'Shoot on sight' for quick goal attempts, 'Play early crosses' for rapid attacks, and a 'Fast' build-up, all reinforced by enabling 'Counter Attack'. Defensively, 'All Over' pressing, 'Aggressive' tackling, and a 'High' back line are implemented to win the ball back quickly and high up the pitch, minimizing the opponent's time on the ball. The 'Sweeper Keeper' is essential to cover the space behind the high defensive line, and 'Low' time wasting ensures the team maintains its high tempo throughout the match. This comprehensive approach ensures maximum adherence to the SM26 meta, optimizing your squad's strengths for dominant, attacking play."
     }
 ];
 

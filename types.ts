@@ -52,6 +52,9 @@ export interface MatchData {
   shotsOnTarget: number;
   notes: string;
   matchImages?: string[];
+  opponentPossession?: number;
+  opponentShots?: number;
+  opponentShotsOnTarget?: number;
 }
 
 export interface Player {

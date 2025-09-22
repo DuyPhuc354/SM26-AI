@@ -108,7 +108,7 @@ export const MatchPerformanceTracker: React.FC<MatchPerformanceTrackerProps> = (
     const { name, value, type } = e.target;
     setNewMatch(prev => ({
       ...prev,
-      [name]: type === 'number' ? parseFloat(value) || 0 : value,
+      [name]: type === 'number' ? (value === '' ? undefined : parseFloat(value)) : value,
     }));
   };
   
@@ -335,18 +335,41 @@ export const MatchPerformanceTracker: React.FC<MatchPerformanceTrackerProps> = (
                           <label htmlFor="score" className="block text-sm font-medium text-gray-300">Final Score*</label>
                           <input type="text" name="score" id="score" value={newMatch.score} onChange={handleChange} placeholder="e.g., 2-1" className="mt-1 block w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white" />
                       </div>
-                       <div>
-                          <label htmlFor="possession" className="block text-sm font-medium text-gray-300">Possession %</label>
-                          <input type="number" name="possession" id="possession" value={newMatch.possession} onChange={handleChange} className="mt-1 block w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white" />
+                      
+                      {/* Stats section */}
+                      <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 border-t border-gray-700 pt-4 mt-2">
+                        <div className="space-y-3">
+                          <h4 className="text-md font-semibold text-center text-gray-200">Your Stats</h4>
+                           <div>
+                              <label htmlFor="possession" className="block text-sm font-medium text-gray-300">Possession %</label>
+                              <input type="number" name="possession" id="possession" value={newMatch.possession} onChange={handleChange} className="mt-1 block w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white" />
+                          </div>
+                           <div>
+                              <label htmlFor="shots" className="block text-sm font-medium text-gray-300">Shots</label>
+                              <input type="number" name="shots" id="shots" value={newMatch.shots} onChange={handleChange} className="mt-1 block w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white" />
+                          </div>
+                          <div>
+                              <label htmlFor="shotsOnTarget" className="block text-sm font-medium text-gray-300">On Target</label>
+                              <input type="number" name="shotsOnTarget" id="shotsOnTarget" value={newMatch.shotsOnTarget} onChange={handleChange} className="mt-1 block w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white" />
+                          </div>
+                        </div>
+                        <div className="space-y-3">
+                          <h4 className="text-md font-semibold text-center text-gray-200">Opponent Stats</h4>
+                          <div>
+                              <label htmlFor="opponentPossession" className="block text-sm font-medium text-gray-300">Possession %</label>
+                              <input type="number" name="opponentPossession" id="opponentPossession" value={newMatch.opponentPossession ?? ''} onChange={handleChange} placeholder="50" className="mt-1 block w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white" />
+                          </div>
+                          <div>
+                              <label htmlFor="opponentShots" className="block text-sm font-medium text-gray-300">Shots</label>
+                              <input type="number" name="opponentShots" id="opponentShots" value={newMatch.opponentShots ?? ''} onChange={handleChange} placeholder="0" className="mt-1 block w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white" />
+                          </div>
+                          <div>
+                              <label htmlFor="opponentShotsOnTarget" className="block text-sm font-medium text-gray-300">On Target</label>
+                              <input type="number" name="opponentShotsOnTarget" id="opponentShotsOnTarget" value={newMatch.opponentShotsOnTarget ?? ''} onChange={handleChange} placeholder="0" className="mt-1 block w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white" />
+                          </div>
+                        </div>
                       </div>
-                       <div>
-                          <label htmlFor="shots" className="block text-sm font-medium text-gray-300">Shots</label>
-                          <input type="number" name="shots" id="shots" value={newMatch.shots} onChange={handleChange} className="mt-1 block w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white" />
-                      </div>
-                      <div>
-                          <label htmlFor="shotsOnTarget" className="block text-sm font-medium text-gray-300">On Target</label>
-                          <input type="number" name="shotsOnTarget" id="shotsOnTarget" value={newMatch.shotsOnTarget} onChange={handleChange} className="mt-1 block w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white" />
-                      </div>
+
                        <div className="md:col-span-2">
                           <label htmlFor="notes" className="block text-sm font-medium text-gray-300">Notes</label>
                           <textarea name="notes" id="notes" value={newMatch.notes} onChange={handleChange} rows={2} className="mt-1 block w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white" placeholder="Any key events or observations..."></textarea>
@@ -410,18 +433,23 @@ export const MatchPerformanceTracker: React.FC<MatchPerformanceTrackerProps> = (
           <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
             {[...matchHistory].sort((a,b) => b.matchNumber - a.matchNumber).map(match => (
               <div key={match.id} className="bg-gray-700/50 p-2 rounded-md text-sm flex justify-between items-center">
-                <div className="flex items-center gap-x-3">
+                <div className="flex items-center gap-x-3 flex-grow min-w-0">
                     {match.matchImages && match.matchImages.length > 0 && (
-                        <button onClick={() => setViewingImages(match.matchImages!)} aria-label="View match screenshots">
+                        <button onClick={() => setViewingImages(match.matchImages!)} aria-label="View match screenshots" className="flex-shrink-0">
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-400 hover:text-white" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" /></svg>
                         </button>
                     )}
-                    <div>
-                        <p><b>#{match.matchNumber}:</b> {match.tacticUsed} vs {match.opponent} (<b>{match.score}</b>)</p>
-                        <p className="text-xs text-gray-400">Poss: {match.possession}%, Shots: {match.shots} ({match.shotsOnTarget})</p>
+                    <div className="flex-grow min-w-0">
+                        <p className="truncate"><b>#{match.matchNumber}:</b> {match.tacticUsed} vs {match.opponent} (<b>{match.score}</b>)</p>
+                        <div className="text-xs text-gray-400 mt-1">
+                          <p><span className="font-semibold text-gray-300">You:</span> Poss: {match.possession}%, Shots: {match.shots} ({match.shotsOnTarget})</p>
+                          {(match.opponentPossession !== undefined || match.opponentShots !== undefined) && (
+                              <p><span className="font-semibold text-gray-300">Opp:</span> Poss: {match.opponentPossession ?? 'N/A'}%, Shots: {match.opponentShots ?? 'N/A'} ({match.opponentShotsOnTarget ?? 'N/A'})</p>
+                          )}
+                        </div>
                     </div>
                 </div>
-                <button onClick={() => onDeleteMatch(match.id)} className="text-gray-400 hover:text-red-500 p-1" aria-label={`Delete match #${match.matchNumber}`}>
+                <button onClick={() => onDeleteMatch(match.id)} className="text-gray-400 hover:text-red-500 p-1 flex-shrink-0" aria-label={`Delete match #${match.matchNumber}`}>
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" /></svg>
                 </button>
               </div>

@@ -1,5 +1,6 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
-import { SM_TACTICS_GUIDE_CONTEXT, PLAYER_ROLE_DESCRIPTIONS } from "../constants";
+import { SM_TACTICS_GUIDE_CONTEXT, PLAYER_ROLE_DESCRIPTIONS, POSITION_TO_ROLES_MAP } from "../constants";
 import type { TacticSuggestion, MatchPrediction, PlayerRoleSuggestion, DetailedTactic, MatchData, TacticImprovementSuggestion } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
@@ -114,8 +115,8 @@ ${playstylePrompt}
 
 INSTRUCTIONS:
 Based on the Soccer Manager 2026 CONTEXT, the user's SQUAD COMPOSITION, and their TEAM PLAYSTYLE (if provided):
-1.  **Strict Formation:** Devise a logical and balanced formation that uses EXACTLY the number of players specified for each position. For example, if the user provides 3 for DC, the formation MUST use 3 central defenders.
-2.  **Assign Roles:** Provide a role for ALL 11 PLAYER POSITIONS (add a Goalkeeper automatically). The roles should complement the formation, the likely strengths of a team with this player distribution, AND the described playstyle.
+1.  **Strict Formation and Positions:** Devise a logical and balanced formation that uses EXACTLY the number of players for the EXACT positions specified by the user. Do NOT substitute positions. For example, if the user specifies 1 player for 'DML', the formation MUST include a 'DML' and not a 'DL'. If the user provides 3 for 'DC', the formation MUST use 3 central defenders.
+2.  **Assign Roles:** For each position from the user's input, provide a valid role from the CONTEXT. Provide a role for ALL 11 PLAYER POSITIONS (add a Goalkeeper automatically). The returned playerRoles array must contain exactly 11 players, and the positions must match the user's SQUAD COMPOSITION plus a GK.
 3.  **Set Instructions:** Provide a complete set of General, Attack, and Defence instructions that are tactically sound for the generated formation and playstyle.
 4.  **Justify:** Explain your reasoning, detailing why the chosen formation and instructions are the most effective approach for the given squad structure and playstyle, referencing the SM26 meta.
 `;
@@ -223,21 +224,25 @@ const roleSuggestionSchema = {
     }
 };
 
-export const getPlayerRoleSuggestion = async (playerDescription: string): Promise<PlayerRoleSuggestion[]> => {
+export const getPlayerRoleSuggestion = async (playerDescription: string, position: string): Promise<PlayerRoleSuggestion[]> => {
+    const validRolesForPosition = POSITION_TO_ROLES_MAP[position.toUpperCase()] || Object.keys(PLAYER_ROLE_DESCRIPTIONS);
+
     const prompt = `
     CONTEXT:
-    You are a world-class Soccer Manager 2026 (SM26) scout. Your task is to analyze a player's description and determine their best roles on the pitch. Use the provided list of roles and the general SM26 meta (fast players, technical ability, etc.) to make your assessment.
+    You are a world-class Soccer Manager 2026 (SM26) scout. Your task is to analyze a player's description and determine their best roles for a specific position on the pitch.
 
-    AVAILABLE PLAYER ROLES:
-    ${Object.keys(PLAYER_ROLE_DESCRIPTIONS).join(', ')}
+    PLAYER'S POSITION: ${position.toUpperCase()}
+
+    AVAILABLE ROLES FOR THIS POSITION:
+    ${validRolesForPosition.join(', ')}
 
     PLAYER DESCRIPTION:
     "${playerDescription}"
 
     INSTRUCTIONS:
-    1.  Based on the description, identify the 3-5 most suitable roles for this player.
+    1.  Based on the description, identify the 3-5 most suitable roles for this player from the "AVAILABLE ROLES FOR THIS POSITION" list ONLY.
     2.  For each role, provide a compatibility score from 1 to 100.
-    3.  Provide a short justification for each score.
+    3.  Provide a short justification for each score, explaining how the player's attributes fit the role's requirements for the specified position.
     4.  Return the results as an array of objects, ordered from the highest score to the lowest.
     `;
     
@@ -368,6 +373,9 @@ const matchImageAnalysisSchema = {
             possession: { type: Type.NUMBER, description: "The user's team possession percentage as a number (0-100). Null if not found." },
             shots: { type: Type.NUMBER, description: "Total shots for the user's team. Null if not found." },
             shotsOnTarget: { type: Type.NUMBER, description: "Shots on target for the user's team. Null if not found." },
+            opponentPossession: { type: Type.NUMBER, description: "The opponent's possession percentage. Null if not found." },
+            opponentShots: { type: Type.NUMBER, description: "Total shots for the opponent. Null if not found." },
+            opponentShotsOnTarget: { type: Type.NUMBER, description: "Shots on target for the opponent. Null if not found." },
         },
         required: ["opponent"],
     },
@@ -395,16 +403,19 @@ export const analyzeMatchImage = async (imageDataUrls: string[]): Promise<Partia
     const textPart = {
         text: `Analyze the provided Soccer Manager 2026 match result screenshot(s). Each image could represent a different match, or multiple images could be for the same match.
 
-**Primary Goal:** Identify all distinct matches and extract their data.
+**Primary Goal:** Identify all distinct matches and extract their data for both the user's team and the opponent.
 
 **INSTRUCTIONS:**
 1.  **Identify User's Team:** A single team name will likely appear in all or most of the images if multiple matches from the same season are provided. This is the **user's team**. All other team names are opponents. This is a crucial step for correctly identifying the opponent. For example, if 'Liverpool' appears in 4 out of 5 images, 'Liverpool' is the user's team.
-2.  **Group and Extract:** Group screenshots that belong to the same match (e.g., one for score, one for stats). Then for each distinct match, extract the following information for the user's team:
+2.  **Group and Extract:** Group screenshots that belong to the same match (e.g., one for score, one for stats). For each distinct match, extract the following information:
     - opponent: The name of the opponent team.
     - score: The final score.
-    - possession: The user's possession percentage.
+    - possession: The user's team possession percentage.
     - shots: The user's total shots.
     - shotsOnTarget: The user's shots on target.
+    - opponentPossession: The opponent's possession percentage.
+    - opponentShots: The opponent's total shots.
+    - opponentShotsOnTarget: The opponent's shots on target.
 3.  **Score Interpretation (CRITICAL):** You MUST determine the final score based on the color of the score box.
     - If the box is **GREEN**, the user's team **WON**. Their score is the higher of the two numbers.
     - If the box is **RED**, the user's team **LOST**. Their score is the lower of the two numbers.

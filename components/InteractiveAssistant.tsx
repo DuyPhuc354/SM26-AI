@@ -3,6 +3,7 @@ import { getTacticSuggestion } from '../services/geminiService';
 import type { TacticSuggestion, DetailedTactic } from '../types';
 import { PLAYER_ROLE_DESCRIPTIONS, POSITION_TO_ROLES_MAP } from '../constants';
 import { Tooltip } from './Tooltip';
+import { TacticImporter } from './TacticImporter';
 
 // Helper to create a deep copy of a suggestion
 const deepCopy = <T,>(obj: T): T => JSON.parse(JSON.stringify(obj));
@@ -27,6 +28,110 @@ const SQUAD_POSITIONS = [
 
 
 const initialSquadComposition = SQUAD_POSITIONS.reduce((acc, pos) => ({ ...acc, [pos.key]: 0 }), {});
+
+const convertDetailedTacticToSuggestion = (tactic: DetailedTactic): TacticSuggestion => {
+  const parseInstructions = (instructionString: string): Record<string, string | boolean> => {
+    const instructions: Record<string, string | boolean> = {};
+    const keyMapping: Record<string, string> = {
+        'width': 'width',
+        'mentality': 'mentality',
+        'tempo': 'tempo',
+        'fluidity': 'fluidity',
+        'workrate': 'workRate',
+        'creativity': 'creativity',
+        'passingstyle': 'passingStyle',
+        'attackingstyle': 'attackingStyle',
+        'forwards': 'forwards',
+        'wideplay': 'widePlay',
+        'buildup': 'buildUp',
+        'counterattack': 'counterAttack',
+        'counter': 'counterAttack', // Alias for inconsistent data
+        'pressing': 'pressing',
+        'tacklingstyle': 'tacklingStyle',
+        'backline': 'backLine',
+        'sweeperkeeper': 'sweeperKeeper',
+        'timewasting': 'timeWasting',
+    };
+
+    instructionString.split(';').forEach(part => {
+      const splitPart = part.split(':');
+      if (splitPart.length < 2) return;
+      const key = splitPart[0].trim();
+      const value = splitPart.slice(1).join(':').trim();
+
+      const normalizedKey = key.replace(/\s+/g, '').toLowerCase();
+      const mappedKey = keyMapping[normalizedKey];
+
+      if (!mappedKey) return;
+      
+      if (mappedKey === 'counterAttack' || mappedKey === 'sweeperKeeper') {
+        instructions[mappedKey] = value.toLowerCase() === 'yes';
+      } else {
+        instructions[mappedKey] = value;
+      }
+    });
+    return instructions;
+  };
+  
+  const parsePlayerRoles = (rolesString: string): { position: string; role: string; }[] => {
+    const roles: { position: string; role: string; }[] = [];
+    rolesString.split(';').forEach(part => {
+        const splitPart = part.split(':');
+        if (splitPart.length < 2) return;
+        const positionsStr = splitPart[0].trim();
+        const role = splitPart.slice(1).join(':').trim();
+
+        if (!positionsStr || !role) return;
+
+        const countMatch = role.match(/\(x(\d+)\)/);
+        const count = countMatch ? parseInt(countMatch[1], 10) : 1;
+        const cleanRole = countMatch ? role.replace(countMatch[0], '').trim() : role;
+
+        const positions = positionsStr.split('/');
+
+        positions.forEach(position => {
+            for (let i = 0; i < count; i++) {
+                roles.push({ position, role: cleanRole });
+            }
+        });
+    });
+    return roles;
+  };
+
+  const general = parseInstructions(tactic.generalInstructions);
+  const attack = parseInstructions(tactic.attackInstructions);
+  const defence = parseInstructions(tactic.defenceInstructions);
+  const playerRoles = parsePlayerRoles(tactic.keyRoles);
+
+  return {
+    formation: tactic.formation,
+    general: {
+      width: general.width as string || 'Normal',
+      mentality: general.mentality as string || 'Normal',
+      tempo: general.tempo as string || 'Normal',
+      fluidity: general.fluidity as string || 'Normal',
+      workRate: general.workRate as string || 'Normal',
+      creativity: general.creativity as string || 'Balanced',
+    },
+    attack: {
+      passingStyle: attack.passingStyle as string || 'Mixed',
+      attackingStyle: attack.attackingStyle as string || 'Mixed',
+      forwards: attack.forwards as string || 'Mixed',
+      widePlay: attack.widePlay as string || 'Mixed',
+      buildUp: attack.buildUp as string || 'Normal',
+      counterAttack: attack.counterAttack as boolean ?? false,
+    },
+    defence: {
+      pressing: defence.pressing as string || 'Own Half',
+      tacklingStyle: defence.tacklingStyle as string || 'Normal',
+      backLine: defence.backLine as string || 'Normal',
+      sweeperKeeper: defence.sweeperKeeper as boolean ?? false,
+      timeWasting: defence.timeWasting as string || 'Normal',
+    },
+    playerRoles,
+    justification: tactic.bestForTips,
+  };
+};
 
 const InstructionInput: React.FC<{label: string, value: string | boolean, category: string, field: string, onChange: (category: string, field: string, value: any) => void}> = ({label, value, category, field, onChange}) => {
     const options: Record<string, string[]> = {
@@ -127,6 +232,7 @@ export const InteractiveAssistant: React.FC<InteractiveAssistantProps> = ({ onSa
   const [error, setError] = useState<string | null>(null);
   const [tacticName, setTacticName] = useState('');
   const [saveMessage, setSaveMessage] = useState('');
+  const [isImporterOpen, setIsImporterOpen] = useState(false);
   
   const totalPlayers = Object.values(squadComposition).reduce((sum, count) => sum + count, 0);
   const isValidSquad = totalPlayers === 10;
@@ -254,10 +360,40 @@ export const InteractiveAssistant: React.FC<InteractiveAssistantProps> = ({ onSa
     }
   };
 
+  const handleImport = (tactic: DetailedTactic) => {
+    const suggestion = convertDetailedTacticToSuggestion(tactic);
+    const copiedSuggestion = deepCopy(suggestion);
+
+    setOriginalSuggestion(copiedSuggestion);
+    setEditableSuggestion(deepCopy(copiedSuggestion));
+    setHistory([deepCopy(copiedSuggestion)]);
+    setHistoryIndex(0);
+    setTacticName(tactic.tacticName);
+
+    setSquadComposition(initialSquadComposition);
+    setPlaystyle('');
+    setError(null);
+    setIsLoading(false);
+    
+    setSaveMessage('Tactic imported! You can now edit and save it.');
+    setTimeout(() => setSaveMessage(''), 4000);
+    
+    setIsImporterOpen(false);
+    navigator.vibrate?.(50);
+  };
 
   return (
     <div className="bg-gray-800 rounded-lg shadow-lg p-6">
-      <h2 className="text-2xl font-bold mb-4 text-[var(--color-text-accent)]">AI Tactic Assistant</h2>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-2xl font-bold text-[var(--color-text-accent)]">AI Tactic Assistant</h2>
+        <button
+          type="button"
+          onClick={() => { setIsImporterOpen(true); navigator.vibrate?.(20); }}
+          className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded-md text-sm transition-colors"
+        >
+          Import Tactic
+        </button>
+      </div>
       <p className="text-gray-400 mb-4">
         Define your available squad by entering the number of players you have for each position. The AI will create the best tactic for your team's structure.
       </p>
@@ -432,6 +568,12 @@ export const InteractiveAssistant: React.FC<InteractiveAssistantProps> = ({ onSa
             </div>
           )}
         </div>
+      )}
+      {isImporterOpen && (
+        <TacticImporter 
+          onClose={() => setIsImporterOpen(false)}
+          onImport={handleImport}
+        />
       )}
     </div>
   );
