@@ -90,7 +90,7 @@ const responseSchema = {
   required: ["formation", "general", "attack", "defence", "playerRoles", "justification"],
 };
 
-export const getTacticSuggestion = async (squadComposition: { [key: string]: number }, playstyle: string): Promise<TacticSuggestion> => {
+export const getTacticSuggestion = async (squadComposition: { [key: string]: number }, playstyle: string, matchHistory: MatchData[]): Promise<TacticSuggestion> => {
   const squadPrompt = Object.entries(squadComposition)
     .map(([pos, count]) => `- ${pos.toUpperCase()}: ${count}`)
     .join('\n');
@@ -99,6 +99,24 @@ export const getTacticSuggestion = async (squadComposition: { [key: string]: num
 USER'S TEAM PLAYSTYLE AND KEY PLAYERS:
 "${playstyle}"
 ` : '';
+
+  const recentHistory = matchHistory.slice(-20); // Last 20 matches
+  const historySummary = recentHistory.map(m => {
+      const scoreParts = m.score.split('-').map(Number);
+      let result = 'D';
+      if (scoreParts.length === 2 && !isNaN(scoreParts[0]) && !isNaN(scoreParts[1])) {
+          if (scoreParts[0] > scoreParts[1]) result = 'W';
+          if (scoreParts[0] < scoreParts[1]) result = 'L';
+      }
+      return `vs ${m.opponent}: ${m.score} (${result}) using ${m.tacticUsed}. Stats: Poss ${m.possession}%, Shots ${m.shots}(${m.shotsOnTarget}).`;
+  }).join('\n');
+
+  const historyPrompt = historySummary ? `
+USER'S RECENT MATCH HISTORY (FOR LEARNING):
+This data reveals what has been working and what has not. Learn from these results to provide a better, more informed tactical suggestion.
+${historySummary}
+` : '';
+
 
   const prompt = `
 CONTEXT:
@@ -111,14 +129,16 @@ The user has the following number of outfield players available for each positio
 ${squadPrompt}
 
 ${playstylePrompt}
+${historyPrompt}
 ---
 
 INSTRUCTIONS:
-Based on the Soccer Manager 2026 CONTEXT, the user's SQUAD COMPOSITION, and their TEAM PLAYSTYLE (if provided):
-1.  **Strict Formation and Positions:** Devise a logical and balanced formation that uses EXACTLY the number of players for the EXACT positions specified by the user. Do NOT substitute positions. For example, if the user specifies 1 player for 'DML', the formation MUST include a 'DML' and not a 'DL'. If the user provides 3 for 'DC', the formation MUST use 3 central defenders.
-2.  **Assign Roles:** For each position from the user's input, provide a valid role from the CONTEXT. Provide a role for ALL 11 PLAYER POSITIONS (add a Goalkeeper automatically). The returned playerRoles array must contain exactly 11 players, and the positions must match the user's SQUAD COMPOSITION plus a GK.
-3.  **Set Instructions:** Provide a complete set of General, Attack, and Defence instructions that are tactically sound for the generated formation and playstyle.
-4.  **Justify:** Explain your reasoning, detailing why the chosen formation and instructions are the most effective approach for the given squad structure and playstyle, referencing the SM26 meta.
+Based on the Soccer Manager 2026 CONTEXT, the user's SQUAD COMPOSITION, their TEAM PLAYSTYLE, and their RECENT MATCH HISTORY (if provided):
+1.  **Analyze Match History (If Provided):** Use the user's match history to understand their past successes and failures. Your suggestion should be an improvement based on this data.
+2.  **Strict Formation and Positions:** Devise a logical and balanced formation that uses EXACTLY the number of players for the EXACT positions specified by the user. Do NOT substitute positions. For example, if the user specifies 1 player for 'DML', the formation MUST include a 'DML' and not a 'DL'. If the user provides 3 for 'DC', the formation MUST use 3 central defenders.
+3.  **Assign Roles:** For each position from the user's input, provide a valid role from the CONTEXT. Provide a role for ALL 11 PLAYER POSITIONS (add a Goalkeeper automatically). The returned playerRoles array must contain exactly 11 players, and the positions must match the user's SQUAD COMPOSITION plus a GK.
+4.  **Set Instructions:** Provide a complete set of General, Attack, and Defence instructions that are tactically sound for the generated formation and playstyle.
+5.  **Justify:** Explain your reasoning, detailing why the chosen formation and instructions are the most effective approach for the given squad structure, playstyle, and past results, referencing the SM26 meta.
 `;
 
   try {
@@ -305,7 +325,8 @@ export const getTacticImprovementSuggestion = async (
         if (detailLevel === 'scores_only') {
             return `vs ${m.opponent}: ${m.score}`;
         }
-        return `vs ${m.opponent}: ${m.score}, Poss: ${m.possession}%, Shots: ${m.shots}(${m.shotsOnTarget})`;
+        const pitchControlStat = m.pitchControl !== undefined ? `, PC: ${m.pitchControl}%` : '';
+        return `vs ${m.opponent}: ${m.score}, Poss: ${m.possession}%${pitchControlStat}, Shots: ${m.shots}(${m.shotsOnTarget})`;
     }).join('; ');
 
     const historyPromptSection = detailLevel === 'scores_only'
@@ -334,9 +355,9 @@ export const getTacticImprovementSuggestion = async (
     ${historySummary}
 
     INSTRUCTIONS:
-    1.  **Analyze Performance**: Based on the match data, identify the tactic's main weaknesses.
-    2.  **Suggest Key Changes**: Propose a few (1-4) specific, high-impact changes to the tactic's instructions or key player roles. The suggested changes MUST come from the options in the TACTICAL GUIDE. For example, if you suggest changing "Width", the new value must be "Narrow", "Normal", or "Wide".
-    3.  **Justify Your Suggestions**: Explain how your proposed changes will address the identified weaknesses.
+    1.  **Analyze Performance**: Based on the match data, identify the tactic's main weaknesses. Pay close attention to 'Pitch Control' (PC). High possession but low pitch control suggests ineffective, sterile possession that doesn't lead to dangerous situations. Low possession but high pitch control indicates an effective counter-attacking style.
+    2.  **Suggest Key Changes**: Propose a few (1-4) specific, high-impact changes to the tactic's instructions or key player roles. For instance, if possession is high but pitch control is low, suggest more direct passing or shooting on sight. The suggested changes MUST come from the options in the TACTICAL GUIDE.
+    3.  **Justify Your Suggestions**: Explain how your proposed changes will address the identified weaknesses, referencing stats like possession vs. pitch control.
     `;
 
     try {
@@ -371,6 +392,7 @@ const matchImageAnalysisSchema = {
             opponent: { type: Type.STRING, description: "The name of the opponent team. This is a required field." },
             score: { type: Type.STRING, description: "The final score for the user's team vs opponent, e.g., '3-1'. Null if not found." },
             possession: { type: Type.NUMBER, description: "The user's team possession percentage as a number (0-100). Null if not found." },
+            pitchControl: { type: Type.NUMBER, description: "The user's team pitch control percentage as a number (0-100). Null if not found." },
             shots: { type: Type.NUMBER, description: "Total shots for the user's team. Null if not found." },
             shotsOnTarget: { type: Type.NUMBER, description: "Shots on target for the user's team. Null if not found." },
             opponentPossession: { type: Type.NUMBER, description: "The opponent's possession percentage. Null if not found." },
@@ -411,6 +433,7 @@ export const analyzeMatchImage = async (imageDataUrls: string[]): Promise<Partia
     - opponent: The name of the opponent team.
     - score: The final score.
     - possession: The user's team possession percentage.
+    - pitchControl: The user's team pitch control percentage.
     - shots: The user's total shots.
     - shotsOnTarget: The user's shots on target.
     - opponentPossession: The opponent's possession percentage.

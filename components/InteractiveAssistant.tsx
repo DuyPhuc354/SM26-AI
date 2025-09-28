@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { getTacticSuggestion } from '../services/geminiService';
-import type { TacticSuggestion, DetailedTactic } from '../types';
+import type { TacticSuggestion, DetailedTactic, MatchData } from '../types';
 import { PLAYER_ROLE_DESCRIPTIONS, POSITION_TO_ROLES_MAP } from '../constants';
 import { Tooltip } from './Tooltip';
 import { TacticImporter } from './TacticImporter';
@@ -27,7 +28,8 @@ const SQUAD_POSITIONS = [
 ];
 
 
-const initialSquadComposition = SQUAD_POSITIONS.reduce((acc, pos) => ({ ...acc, [pos.key]: 0 }), {});
+// Fix: Explicitly type the accumulator to fix downstream type inference issue.
+const initialSquadComposition = SQUAD_POSITIONS.reduce<Record<string, number>>((acc, pos) => ({ ...acc, [pos.key]: 0 }), {});
 
 const convertDetailedTacticToSuggestion = (tactic: DetailedTactic): TacticSuggestion => {
   const parseInstructions = (instructionString: string): Record<string, string | boolean> => {
@@ -215,9 +217,10 @@ const convertSuggestionToDetailedTactic = (suggestion: TacticSuggestion, name: s
 
 interface InteractiveAssistantProps {
   onSaveTactic: (tactic: DetailedTactic) => void;
+  matchHistory: MatchData[];
 }
 
-export const InteractiveAssistant: React.FC<InteractiveAssistantProps> = ({ onSaveTactic }) => {
+export const InteractiveAssistant: React.FC<InteractiveAssistantProps> = ({ onSaveTactic, matchHistory }) => {
   const [squadComposition, setSquadComposition] = useState<{[key: string]: number}>(initialSquadComposition);
   const [playstyle, setPlaystyle] = useState('');
   
@@ -234,7 +237,8 @@ export const InteractiveAssistant: React.FC<InteractiveAssistantProps> = ({ onSa
   const [saveMessage, setSaveMessage] = useState('');
   const [isImporterOpen, setIsImporterOpen] = useState(false);
   
-  const totalPlayers = Object.values(squadComposition).reduce((sum, count) => sum + count, 0);
+  // FIX: Explicitly type the arguments for the reduce function to prevent type inference issues.
+  const totalPlayers = Object.values(squadComposition).reduce((sum: number, count: number) => sum + count, 0);
   const isValidSquad = totalPlayers === 10;
 
   const handleCompositionChange = (positionKey: string, value: string) => {
@@ -270,7 +274,7 @@ export const InteractiveAssistant: React.FC<InteractiveAssistantProps> = ({ onSa
     setSaveMessage('');
 
     try {
-      const result = await getTacticSuggestion(squadComposition, playstyle);
+      const result = await getTacticSuggestion(squadComposition, playstyle, matchHistory);
       const copiedResult = deepCopy(result);
       setOriginalSuggestion(copiedResult);
       setEditableSuggestion(deepCopy(copiedResult));

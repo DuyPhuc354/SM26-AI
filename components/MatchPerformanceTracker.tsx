@@ -19,6 +19,7 @@ const initialMatchState: Omit<MatchData, 'id' | 'matchNumber'> = {
   opponent: '',
   score: '',
   possession: 50,
+  pitchControl: 50,
   shots: 0,
   shotsOnTarget: 0,
   notes: '',
@@ -105,7 +106,8 @@ export const MatchPerformanceTracker: React.FC<MatchPerformanceTrackerProps> = (
   }, [allTactics, bulkImportTactic]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value, type } = e.target;
+    const { name, value } = e.target;
+    const type = 'type' in e.target ? e.target.type : '';
     setNewMatch(prev => ({
       ...prev,
       [name]: type === 'number' ? (value === '' ? undefined : parseFloat(value)) : value,
@@ -140,7 +142,8 @@ export const MatchPerformanceTracker: React.FC<MatchPerformanceTrackerProps> = (
     const files = e.target.files;
     if (files && files.length > 0) {
         setScanError('');
-        const filePromises = Array.from(files).map(file => {
+        // Fix: Explicitly type `file` as `File` to resolve type inference issues.
+        const filePromises = Array.from(files).map((file: File) => {
             return new Promise<string>((resolve, reject) => {
                 if (file.type.startsWith('image/')) {
                     const reader = new FileReader();
@@ -344,6 +347,10 @@ export const MatchPerformanceTracker: React.FC<MatchPerformanceTrackerProps> = (
                               <label htmlFor="possession" className="block text-sm font-medium text-gray-300">Possession %</label>
                               <input type="number" name="possession" id="possession" value={newMatch.possession} onChange={handleChange} className="mt-1 block w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white" />
                           </div>
+                          <div>
+                              <label htmlFor="pitchControl" className="block text-sm font-medium text-gray-300">Pitch Control %</label>
+                              <input type="number" name="pitchControl" id="pitchControl" value={newMatch.pitchControl ?? ''} onChange={handleChange} placeholder="50" className="mt-1 block w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white" />
+                          </div>
                            <div>
                               <label htmlFor="shots" className="block text-sm font-medium text-gray-300">Shots</label>
                               <input type="number" name="shots" id="shots" value={newMatch.shots} onChange={handleChange} className="mt-1 block w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white" />
@@ -442,7 +449,7 @@ export const MatchPerformanceTracker: React.FC<MatchPerformanceTrackerProps> = (
                     <div className="flex-grow min-w-0">
                         <p className="truncate"><b>#{match.matchNumber}:</b> {match.tacticUsed} vs {match.opponent} (<b>{match.score}</b>)</p>
                         <div className="text-xs text-gray-400 mt-1">
-                          <p><span className="font-semibold text-gray-300">You:</span> Poss: {match.possession}%, Shots: {match.shots} ({match.shotsOnTarget})</p>
+                          <p><span className="font-semibold text-gray-300">You:</span> Poss: {match.possession}%{match.pitchControl !== undefined ? `, PC: ${match.pitchControl}%` : ''}, Shots: {match.shots} ({match.shotsOnTarget})</p>
                           {(match.opponentPossession !== undefined || match.opponentShots !== undefined) && (
                               <p><span className="font-semibold text-gray-300">Opp:</span> Poss: {match.opponentPossession ?? 'N/A'}%, Shots: {match.opponentShots ?? 'N/A'} ({match.opponentShotsOnTarget ?? 'N/A'})</p>
                           )}

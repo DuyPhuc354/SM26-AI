@@ -1,3 +1,4 @@
+
 export interface TacticSuggestion {
   formation: string;
   general: {
@@ -48,6 +49,7 @@ export interface MatchData {
   opponent: string;
   score: string;
   possession: number;
+  pitchControl?: number;
   shots: number;
   shotsOnTarget: number;
   notes: string;
