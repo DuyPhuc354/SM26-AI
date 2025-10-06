@@ -6,6 +6,7 @@ interface TacticImprovementModalProps {
   suggestion: TacticImprovementSuggestion;
   originalTactic: DetailedTactic;
   onClose: () => void;
+  onSaveNewVersion: (originalTactic: DetailedTactic, suggestion: TacticImprovementSuggestion) => void;
 }
 
 const ChangeItem: React.FC<{ title: string, change?: string }> = ({ title, change }) => {
@@ -19,7 +20,12 @@ const ChangeItem: React.FC<{ title: string, change?: string }> = ({ title, chang
 };
 
 
-export const TacticImprovementModal: React.FC<TacticImprovementModalProps> = ({ suggestion, originalTactic, onClose }) => {
+export const TacticImprovementModal: React.FC<TacticImprovementModalProps> = ({ suggestion, originalTactic, onClose, onSaveNewVersion }) => {
+  const handleApplyAndSave = () => {
+    onSaveNewVersion(originalTactic, suggestion);
+    onClose();
+  };
+
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => { onClose(); navigator.vibrate?.(20); }}>
       <div className="bg-gray-800/90 rounded-lg shadow-xl p-6 w-full max-w-2xl text-white border border-gray-700 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
@@ -58,8 +64,11 @@ export const TacticImprovementModal: React.FC<TacticImprovementModalProps> = ({ 
             </div>
         </div>
 
-        <div className="mt-6 text-right">
-          <button onClick={() => { onClose(); navigator.vibrate?.(20); }} className="bg-[var(--color-accent-600)] hover:bg-[var(--color-accent-700)] text-white font-bold py-2 px-6 rounded-md">
+        <div className="mt-6 flex justify-end gap-x-3">
+          <button onClick={handleApplyAndSave} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md">
+            Apply & Save as New
+          </button>
+          <button onClick={() => { onClose(); navigator.vibrate?.(20); }} className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-6 rounded-md">
             Close
           </button>
         </div>

@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { SM_TACTICS_GUIDE_CONTEXT, PLAYER_ROLE_DESCRIPTIONS, POSITION_TO_ROLES_MAP } from "../constants";
 import type { TacticSuggestion, MatchPrediction, PlayerRoleSuggestion, DetailedTactic, MatchData, TacticImprovementSuggestion } from "../types";
@@ -90,7 +89,7 @@ const responseSchema = {
   required: ["formation", "general", "attack", "defence", "playerRoles", "justification"],
 };
 
-export const getTacticSuggestion = async (squadComposition: { [key: string]: number }, playstyle: string, matchHistory: MatchData[]): Promise<TacticSuggestion> => {
+export const getTacticSuggestion = async (squadComposition: { [key: string]: number }, playstyle: string, matchHistory: MatchData[], knowledge?: string): Promise<TacticSuggestion> => {
   const squadPrompt = Object.entries(squadComposition)
     .map(([pos, count]) => `- ${pos.toUpperCase()}: ${count}`)
     .join('\n');
@@ -100,8 +99,8 @@ USER'S TEAM PLAYSTYLE AND KEY PLAYERS:
 "${playstyle}"
 ` : '';
 
-  const recentHistory = matchHistory.slice(-20); // Last 20 matches
-  const historySummary = recentHistory.map(m => {
+  // Use the entire match history for context, not just a recent slice.
+  const historySummary = matchHistory.map(m => {
       const scoreParts = m.score.split('-').map(Number);
       let result = 'D';
       if (scoreParts.length === 2 && !isNaN(scoreParts[0]) && !isNaN(scoreParts[1])) {
@@ -112,9 +111,17 @@ USER'S TEAM PLAYSTYLE AND KEY PLAYERS:
   }).join('\n');
 
   const historyPrompt = historySummary ? `
-USER'S RECENT MATCH HISTORY (FOR LEARNING):
+USER'S MATCH HISTORY (FOR LEARNING):
 This data reveals what has been working and what has not. Learn from these results to provide a better, more informed tactical suggestion.
 ${historySummary}
+` : '';
+
+  const knowledgePrompt = knowledge?.trim() ? `
+AI'S PREVIOUSLY LEARNED KNOWLEDGE (USE THIS FOR CONTEXT):
+This is a summary of learnings from past analysis. Use this to inform your new suggestion and avoid repeating past mistakes.
+---
+${knowledge}
+---
 ` : '';
 
 
@@ -122,6 +129,7 @@ ${historySummary}
 CONTEXT:
 ${SM_TACTICS_GUIDE_CONTEXT}
 
+${knowledgePrompt}
 ---
 
 USER'S SQUAD COMPOSITION:
@@ -133,12 +141,12 @@ ${historyPrompt}
 ---
 
 INSTRUCTIONS:
-Based on the Soccer Manager 2026 CONTEXT, the user's SQUAD COMPOSITION, their TEAM PLAYSTYLE, and their RECENT MATCH HISTORY (if provided):
-1.  **Analyze Match History (If Provided):** Use the user's match history to understand their past successes and failures. Your suggestion should be an improvement based on this data.
+Based on the Soccer Manager 2026 CONTEXT, the AI'S PREVIOUSLY LEARNED KNOWLEDGE (if provided), the user's SQUAD COMPOSITION, their TEAM PLAYSTYLE, and their MATCH HISTORY (if provided):
+1.  **Analyze All Context:** Use all available information, especially the learned knowledge and match history, to understand past successes and failures. Your suggestion should be an improvement based on this data.
 2.  **Strict Formation and Positions:** Devise a logical and balanced formation that uses EXACTLY the number of players for the EXACT positions specified by the user. Do NOT substitute positions. For example, if the user specifies 1 player for 'DML', the formation MUST include a 'DML' and not a 'DL'. If the user provides 3 for 'DC', the formation MUST use 3 central defenders.
 3.  **Assign Roles:** For each position from the user's input, provide a valid role from the CONTEXT. Provide a role for ALL 11 PLAYER POSITIONS (add a Goalkeeper automatically). The returned playerRoles array must contain exactly 11 players, and the positions must match the user's SQUAD COMPOSITION plus a GK.
 4.  **Set Instructions:** Provide a complete set of General, Attack, and Defence instructions that are tactically sound for the generated formation and playstyle.
-5.  **Justify:** Explain your reasoning, detailing why the chosen formation and instructions are the most effective approach for the given squad structure, playstyle, and past results, referencing the SM26 meta.
+5.  **Justify:** Explain your reasoning, detailing why the chosen formation and instructions are the most effective approach for the given squad structure, playstyle, and past results, referencing the SM26 meta and learned knowledge.
 `;
 
   try {
@@ -315,7 +323,8 @@ export const getTacticImprovementSuggestion = async (
     history: MatchData[],
     detailLevel: 'full' | 'scores_only' = 'full'
 ): Promise<TacticImprovementSuggestion> => {
-    const relevantHistory = history.filter(m => m.tacticUsed === tactic.tacticName).slice(-10); // Use last 10 matches for this tactic
+    // Analyze all matches for the selected tactic, not just a recent slice.
+    const relevantHistory = history.filter(m => m.tacticUsed === tactic.tacticName);
 
     if (relevantHistory.length < 3) {
         throw new Error("Not enough match data for this tactic. Please log at least 3 matches to get an analysis.");
@@ -330,13 +339,13 @@ export const getTacticImprovementSuggestion = async (
     }).join('; ');
 
     const historyPromptSection = detailLevel === 'scores_only'
-        ? `RECENT MATCH RESULTS (scores only):`
-        : `RECENT MATCH HISTORY (full details):`;
+        ? `MATCH RESULTS (scores only):`
+        : `MATCH HISTORY (full details):`;
 
 
     const prompt = `
     CONTEXT:
-    You are an expert Soccer Manager 2026 tactical analyst. Your task is to analyze a tactic and its recent match results to provide concrete improvement suggestions.
+    You are an expert Soccer Manager 2026 tactical analyst. Your task is to analyze a tactic and its match results to provide concrete improvement suggestions.
     You MUST adhere strictly to the valid instructions and roles defined in the guide below. Do not invent new roles or instruction values.
 
     --- TACTICAL GUIDE ---
@@ -553,4 +562,52 @@ For each match found, return an object containing:
         console.error("Error calling Gemini API for history image analysis:", error);
         throw new Error("Failed to analyze match history image with Gemini API.");
     }
+};
+
+export const synthesizeKnowledge = async (matchHistory: MatchData[]): Promise<string> => {
+  const historySummary = matchHistory.map(m => {
+      const scoreParts = m.score.split('-').map(Number);
+      let result = 'D';
+      if (scoreParts.length === 2 && !isNaN(scoreParts[0]) && !isNaN(scoreParts[1])) {
+          if (scoreParts[0] > scoreParts[1]) result = 'W';
+          if (scoreParts[0] < scoreParts[1]) result = 'L';
+      }
+      return `vs ${m.opponent}: ${m.score} (${result}) using ${m.tacticUsed}. Stats: Poss ${m.possession}%, Shots ${m.shots}(${m.shotsOnTarget}).`;
+  }).join('\n');
+
+  const prompt = `
+You are an expert Soccer Manager 2026 tactical analyst. Your task is to analyze the following comprehensive match history and synthesize the key learnings into a concise, reusable knowledge summary.
+
+MATCH HISTORY:
+${historySummary}
+
+INSTRUCTIONS:
+Review the entire match history provided. Identify recurring patterns, successful tactical elements, and persistent weaknesses. Create a summary of your findings. This summary will be fed back to you in future sessions to act as your 'memory'. The summary should be written from your perspective (e.g., 'I have learned that...', 'My analysis shows...'). Focus on:
+1.  What tactics and formations have the highest win rate?
+2.  Are there specific opponent types this team struggles against?
+3.  What player roles or instructions seem most effective based on the results?
+4.  What are the biggest vulnerabilities (e.g., conceding late goals, struggling to control the midfield despite high possession)?
+5.  Provide actionable insights that can inform future tactical decisions.
+
+The output should be a plain text summary, not JSON.
+`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+      config: {
+        temperature: 0.5,
+      },
+    });
+
+    const summary = response.text;
+    if (!summary) {
+      throw new Error("Received an empty response from the API when generating knowledge.");
+    }
+    return summary;
+  } catch (error) {
+    console.error("Error calling Gemini API for knowledge synthesis:", error);
+    throw new Error("Failed to synthesize knowledge from Gemini API.");
+  }
 };

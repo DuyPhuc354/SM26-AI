@@ -12,6 +12,7 @@ interface MatchPerformanceTrackerProps {
   onDeleteMatch: (matchId: string) => void;
   onClearHistory: () => void;
   onOpenHistoryImporter: () => void;
+  onSaveNewVersion: (originalTactic: DetailedTactic, suggestion: TacticImprovementSuggestion) => void;
 }
 
 const initialMatchState: Omit<MatchData, 'id' | 'matchNumber'> = {
@@ -29,7 +30,7 @@ const initialMatchState: Omit<MatchData, 'id' | 'matchNumber'> = {
 const DRAFT_KEY = 'sm26_match_form_draft';
 
 export const MatchPerformanceTracker: React.FC<MatchPerformanceTrackerProps> = ({
-  matchHistory, allTactics, onAddMatch, onAddMatches, onDeleteMatch, onClearHistory, onOpenHistoryImporter
+  matchHistory, allTactics, onAddMatch, onAddMatches, onDeleteMatch, onClearHistory, onOpenHistoryImporter, onSaveNewVersion
 }) => {
   const [newMatch, setNewMatch] = useState<Omit<MatchData, 'id' | 'matchNumber'>>(initialMatchState);
   const [error, setError] = useState('');
@@ -533,6 +534,7 @@ export const MatchPerformanceTracker: React.FC<MatchPerformanceTrackerProps> = (
             suggestion={suggestion} 
             originalTactic={tacticForAnalysis} 
             onClose={() => setSuggestion(null)}
+            onSaveNewVersion={onSaveNewVersion}
         />
       )}
       

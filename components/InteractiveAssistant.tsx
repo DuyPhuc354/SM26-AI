@@ -218,9 +218,10 @@ const convertSuggestionToDetailedTactic = (suggestion: TacticSuggestion, name: s
 interface InteractiveAssistantProps {
   onSaveTactic: (tactic: DetailedTactic) => void;
   matchHistory: MatchData[];
+  knowledge: string;
 }
 
-export const InteractiveAssistant: React.FC<InteractiveAssistantProps> = ({ onSaveTactic, matchHistory }) => {
+export const InteractiveAssistant: React.FC<InteractiveAssistantProps> = ({ onSaveTactic, matchHistory, knowledge }) => {
   const [squadComposition, setSquadComposition] = useState<{[key: string]: number}>(initialSquadComposition);
   const [playstyle, setPlaystyle] = useState('');
   
@@ -274,7 +275,7 @@ export const InteractiveAssistant: React.FC<InteractiveAssistantProps> = ({ onSa
     setSaveMessage('');
 
     try {
-      const result = await getTacticSuggestion(squadComposition, playstyle, matchHistory);
+      const result = await getTacticSuggestion(squadComposition, playstyle, matchHistory, knowledge);
       const copiedResult = deepCopy(result);
       setOriginalSuggestion(copiedResult);
       setEditableSuggestion(deepCopy(copiedResult));

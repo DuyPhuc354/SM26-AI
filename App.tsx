@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
 import { InteractiveAssistant } from './components/InteractiveAssistant';
@@ -13,8 +12,10 @@ import { MatchPredictor } from './components/MatchPredictor';
 import { Badges } from './components/Badges';
 import { UpdateNotification } from './components/UpdateNotification';
 import { PlayerRoleFinder } from './components/PlayerRoleFinder';
+import { KnowledgeManager } from './components/KnowledgeManager';
 import { guideContent, communityTactics, tips } from './constants';
-import type { DetailedTactic, MatchData, Badge } from './types';
+import { synthesizeKnowledge } from './services/geminiService';
+import type { DetailedTactic, MatchData, Badge, TacticImprovementSuggestion } from './types';
 
 const APP_UPDATE_VERSION = 'v1.2'; // Increment to show update modal again
 
@@ -27,6 +28,8 @@ const App: React.FC = () => {
   const [isHistoryImporterOpen, setIsHistoryImporterOpen] = useState(false);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  const [aiKnowledge, setAiKnowledge] = useState<string>('');
+  const [isGeneratingKnowledge, setIsGeneratingKnowledge] = useState(false);
 
   useEffect(() => {
     try {
@@ -37,6 +40,10 @@ const App: React.FC = () => {
       const storedHistory = localStorage.getItem('sm26_match_history');
       if (storedHistory) {
         setMatchHistory(JSON.parse(storedHistory));
+      }
+      const storedKnowledge = localStorage.getItem('sm26_ai_knowledge');
+      if (storedKnowledge) {
+        setAiKnowledge(storedKnowledge);
       }
 
       const lastUpdateViewed = localStorage.getItem('sm26_update_viewed');
@@ -144,6 +151,155 @@ const App: React.FC = () => {
           navigator.vibrate?.([100, 50, 100]);
       }
   };
+
+  const handleUpdateKnowledge = (newKnowledge: string) => {
+    setAiKnowledge(newKnowledge);
+    localStorage.setItem('sm26_ai_knowledge', newKnowledge);
+    triggerVibration();
+  };
+
+  const handleGenerateKnowledge = async () => {
+    if (matchHistory.length < 5) {
+      alert("Please log at least 5 matches to generate a meaningful knowledge summary.");
+      return;
+    }
+    triggerVibration();
+    setIsGeneratingKnowledge(true);
+    try {
+      const summary = await synthesizeKnowledge(matchHistory);
+      handleUpdateKnowledge(summary);
+    } catch (e) {
+      console.error("Failed to generate knowledge", e);
+      alert(e instanceof Error ? e.message : "An unknown error occurred while generating knowledge.");
+    } finally {
+      setIsGeneratingKnowledge(false);
+    }
+  };
+
+  const handleExportKnowledge = () => {
+    if (!aiKnowledge) return;
+    triggerVibration();
+    const blob = new Blob([aiKnowledge], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'sm26_ai_knowledge.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportKnowledge = (file: File) => {
+    navigator.vibrate?.(20);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const fileContent = event.target?.result as string;
+      if (fileContent) {
+        handleUpdateKnowledge(fileContent);
+      } else {
+        alert('Could not read the file.');
+      }
+    };
+    reader.onerror = () => {
+        alert('Error reading the file.');
+    };
+    reader.readAsText(file);
+  };
+
+  const handleSaveTacticVersion = (originalTactic: DetailedTactic, suggestion: TacticImprovementSuggestion) => {
+    triggerVibration();
+
+    const applyTacticChanges = (tactic: DetailedTactic, changes: TacticImprovementSuggestion): DetailedTactic => {
+        const newTactic = JSON.parse(JSON.stringify(tactic));
+        const { general, attack, defence, keyRoles } = changes.suggestedChanges;
+
+        const instructionChangeRegex = /change\s+([\w\s]+)\s+from\s+.+?\s+to\s+([\w\s\d.-]+)/i;
+        
+        const applyInstructionChange = (instructionString: string, change: string | undefined): string => {
+            if (!change) return instructionString;
+            
+            const match = change.match(instructionChangeRegex);
+            if (!match) return instructionString;
+            
+            const [, rawInstructionName, rawNewValue] = match;
+            const instructionName = rawInstructionName.trim();
+            const newValue = rawNewValue.trim().replace(/[.,]$/, '');
+
+            const instructions: Record<string, string> = {};
+            const originalKeys: string[] = [];
+            instructionString.split(';').forEach(part => {
+                const separatorIndex = part.indexOf(':');
+                if (separatorIndex > -1) {
+                    const key = part.substring(0, separatorIndex).trim();
+                    const value = part.substring(separatorIndex + 1).trim();
+                    if (key) {
+                        instructions[key] = value;
+                        originalKeys.push(key);
+                    }
+                }
+            });
+
+            const keyToUpdate = Object.keys(instructions).find(k => k.toLowerCase() === instructionName.toLowerCase());
+
+            if (keyToUpdate) {
+                instructions[keyToUpdate] = newValue;
+            } else {
+                console.warn(`Could not find instruction key for "${instructionName}" in "${instructionString}"`);
+                return instructionString;
+            }
+
+            return originalKeys.map(key => `${key}: ${instructions[key]}`).join('; ');
+        };
+
+        newTactic.generalInstructions = applyInstructionChange(newTactic.generalInstructions, general);
+        newTactic.attackInstructions = applyInstructionChange(newTactic.attackInstructions, attack);
+        newTactic.defenceInstructions = applyInstructionChange(newTactic.defenceInstructions, defence);
+
+        const roleChangeRegex = /switch\s+([\w\s-]+)\s+to\s+a?\s*([\w\s-]+)/i;
+        if (keyRoles) {
+            const match = keyRoles.match(roleChangeRegex);
+            if (match) {
+                const [, rawOldRole, rawNewRole] = match;
+                const oldRole = rawOldRole.trim().replace(/[.,]$/, '');
+                const newRole = rawNewRole.trim().replace(/[.,]$/, '');
+                
+                let isReplaced = false;
+
+                if (newTactic.keyRoles.includes(oldRole)) {
+                    newTactic.keyRoles = newTactic.keyRoles.replace(oldRole, newRole);
+                    isReplaced = true;
+                } else {
+                    const oldRoleShort = oldRole.replace(/\s+(?:midfielder|defender|forward|keeper|striker)$/i, '').trim();
+                    if (oldRoleShort !== oldRole && newTactic.keyRoles.includes(oldRoleShort)) {
+                        newTactic.keyRoles = newTactic.keyRoles.replace(oldRoleShort, newRole);
+                        isReplaced = true;
+                    }
+                }
+
+                if (!isReplaced) {
+                     console.warn(`Could not apply role change for "${oldRole}"`);
+                }
+            }
+        }
+        return newTactic;
+    };
+
+    const modifiedTactic = applyTacticChanges(originalTactic, suggestion);
+
+    const baseName = originalTactic.tacticName.replace(/\s+v\d+(\.\d+)?$/, '');
+    let version = 2;
+    let newName = `${baseName} v${version}`;
+
+    const existingNames = savedTactics.map(t => t.tacticName);
+    while (existingNames.includes(newName)) {
+        version++;
+        newName = `${baseName} v${version}`;
+    }
+
+    modifiedTactic.tacticName = newName;
+    handleSaveTactic(modifiedTactic);
+  };
   
   const allTactics = [...communityTactics, ...savedTactics];
 
@@ -185,7 +341,7 @@ const App: React.FC = () => {
       <main className="container mx-auto px-4 py-8">
         <div className={activeTab === 'dashboard' ? '' : 'hidden'}>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <InteractiveAssistant onSaveTactic={handleSaveTactic} matchHistory={matchHistory} />
+            <InteractiveAssistant onSaveTactic={handleSaveTactic} matchHistory={matchHistory} knowledge={aiKnowledge} />
             <MatchPerformanceTracker
               matchHistory={matchHistory}
               allTactics={allTactics}
@@ -197,6 +353,7 @@ const App: React.FC = () => {
                 setIsHistoryImporterOpen(true);
                 navigator.vibrate?.(20);
               }}
+              onSaveNewVersion={handleSaveTacticVersion}
             />
           </div>
         </div>
@@ -219,6 +376,18 @@ const App: React.FC = () => {
               <div className="space-y-8">
                 <FormationPlanner />
                 <PlayerRoleFinder />
+                <KnowledgeManager
+                    knowledge={aiKnowledge}
+                    isGenerating={isGeneratingKnowledge}
+                    onGenerate={handleGenerateKnowledge}
+                    onImport={handleImportKnowledge}
+                    onExport={handleExportKnowledge}
+                />
+              </div>
+              <div className="space-y-8">
+                <MatchPredictor />
+                <Badges allBadges={allBadges} />
+                <TipsSection tips={tips} />
                 <div className="bg-gray-800 rounded-lg shadow-lg p-6">
                     <h2 className="text-2xl font-bold mb-4 text-[var(--color-text-accent)]">Tactics Creation Guide</h2>
                     <Accordion>
@@ -240,11 +409,6 @@ const App: React.FC = () => {
                         ))}
                     </Accordion>
                 </div>
-              </div>
-              <div className="space-y-8">
-                <MatchPredictor />
-                <Badges allBadges={allBadges} />
-                <TipsSection tips={tips} />
               </div>
           </div>
         </div>

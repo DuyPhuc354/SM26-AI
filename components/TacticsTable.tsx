@@ -133,14 +133,20 @@ const TacticActions: React.FC<{
     isSaved: boolean;
     onDelete?: (name: string) => void;
     onShare: (tactic: DetailedTactic) => void;
+    onExport: (tactic: DetailedTactic) => void;
     onSelect: (tactic: DetailedTactic) => void;
     onToggleFavorite?: (name: string) => void;
     isSelected: boolean;
     isSelectionDisabled: boolean;
-}> = ({ tactic, isSaved, onDelete, onShare, onSelect, onToggleFavorite, isSelected, isSelectionDisabled }) => (
+}> = ({ tactic, isSaved, onDelete, onShare, onExport, onSelect, onToggleFavorite, isSelected, isSelectionDisabled }) => (
     <div className="flex items-center gap-x-2">
         <button onClick={() => { onShare(tactic); navigator.vibrate?.(20); }} className="text-gray-400 hover:text-blue-400 transition-colors" aria-label={`Share ${tactic.tacticName}`}>
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 10.895-1.789l-4.94-2.47a3.027 3.027 0 000-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z" /></svg>
+        </button>
+        <button onClick={() => onExport(tactic)} className="text-gray-400 hover:text-green-400 transition-colors" aria-label={`Export ${tactic.tacticName}`}>
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+            </svg>
         </button>
         {isSaved && onToggleFavorite && (
             <button onClick={() => { onToggleFavorite(tactic.tacticName); navigator.vibrate?.(20); }} className="text-gray-400 hover:text-yellow-400 transition-colors" aria-label={`Favorite ${tactic.tacticName}`}>
@@ -172,18 +178,19 @@ const TacticCard: React.FC<{
   isSaved: boolean;
   onDelete?: (name: string) => void;
   onShare: (tactic: DetailedTactic) => void;
+  onExport: (tactic: DetailedTactic) => void;
   onSelect: (tactic: DetailedTactic) => void;
   onToggleFavorite?: (name: string) => void;
   isSelected: boolean;
   isSelectionDisabled: boolean;
-}> = ({ tactic, isSaved, onDelete, onShare, onSelect, onToggleFavorite, isSelected, isSelectionDisabled }) => (
+}> = ({ tactic, isSaved, onDelete, onShare, onExport, onSelect, onToggleFavorite, isSelected, isSelectionDisabled }) => (
   <div className={`bg-gray-800/80 p-4 rounded-lg border transition-colors ${tactic.isFavorite ? 'border-yellow-500/50' : 'border-gray-700/80'}`}>
     <div className="flex justify-between items-start">
       <h3 className="text-lg font-bold text-white mb-2 pr-2">
         {tactic.isFavorite && <span className="text-yellow-400" aria-label="Favorite">★ </span>}
         {tactic.tacticName} - <span className="text-[var(--color-text-accent)]">{tactic.formation}</span>
       </h3>
-      <TacticActions {...{tactic, isSaved, onDelete, onShare, onSelect, onToggleFavorite, isSelected, isSelectionDisabled}}/>
+      <TacticActions {...{tactic, isSaved, onDelete, onShare, onExport, onSelect, onToggleFavorite, isSelected, isSelectionDisabled}}/>
     </div>
     
     <div className="mt-2 border-t border-gray-700 pt-3">
@@ -204,7 +211,7 @@ const TacticCard: React.FC<{
   </div>
 );
 
-const TacticRow: React.FC<any> = ({ tactic, isSaved, onDelete, onShare, onSelect, onToggleFavorite, isSelected, isSelectionDisabled }) => (
+const TacticRow: React.FC<any> = ({ tactic, isSaved, onDelete, onShare, onExport, onSelect, onToggleFavorite, isSelected, isSelectionDisabled }) => (
     <div className={`flex items-center justify-between p-2 rounded-md hover:bg-gray-800/50 text-sm transition-colors ${tactic.isFavorite ? 'bg-yellow-900/20' : ''}`}>
         <div className="flex-1 min-w-0 flex items-center">
             {tactic.isFavorite && <span className="text-yellow-400 mr-2" aria-label="Favorite">★</span>}
@@ -214,7 +221,7 @@ const TacticRow: React.FC<any> = ({ tactic, isSaved, onDelete, onShare, onSelect
             </div>
         </div>
         <div className="flex-shrink-0">
-            <TacticActions {...{tactic, isSaved, onDelete, onShare, onSelect, onToggleFavorite, isSelected, isSelectionDisabled}}/>
+            <TacticActions {...{tactic, isSaved, onDelete, onShare, onExport, onSelect, onToggleFavorite, isSelected, isSelectionDisabled}}/>
         </div>
     </div>
 );
@@ -271,6 +278,22 @@ export const TacticsLibrary: React.FC<{
     });
   };
 
+  const handleExportTactic = (tactic: DetailedTactic) => {
+    navigator.vibrate?.(50);
+    const { isFavorite, ...tacticToExport } = tactic;
+    const jsonString = JSON.stringify(tacticToExport, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const fileName = `${tactic.tacticName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.json`;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const TacticComponent = viewMode === 'card' ? TacticCard : TacticRow;
   const commonTacticProps = (tactic: DetailedTactic, isSaved: boolean) => ({
       key: tactic.tacticName,
@@ -278,6 +301,7 @@ export const TacticsLibrary: React.FC<{
       isSaved,
       onDelete: isSaved ? onDeleteTactic : undefined,
       onShare: setTacticToShare,
+      onExport: handleExportTactic,
       onSelect: handleSelectTactic,
       onToggleFavorite: isSaved ? onToggleFavorite : undefined,
       isSelected: !!selectedToCompare.find(t => t.tacticName === tactic.tacticName),
