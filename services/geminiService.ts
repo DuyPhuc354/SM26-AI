@@ -107,7 +107,7 @@ USER'S TEAM PLAYSTYLE AND KEY PLAYERS:
           if (scoreParts[0] > scoreParts[1]) result = 'W';
           if (scoreParts[0] < scoreParts[1]) result = 'L';
       }
-      return `vs ${m.opponent}: ${m.score} (${result}) using ${m.tacticUsed}. Stats: Poss ${m.possession}%, Shots ${m.shots}(${m.shotsOnTarget}).`;
+      return `vs ${m.opponent}: ${m.score} (${result}) using ${m.tacticUsed}. Stats: Poss ${m.possession}%, Pitch Control ${m.pitchControl ?? 'N/A'}%, Shots ${m.shots}(${m.shotsOnTarget}).`;
   }).join('\n');
 
   const historyPrompt = historySummary ? `
@@ -151,12 +151,13 @@ Based on the Soccer Manager 2026 CONTEXT, the AI'S PREVIOUSLY LEARNED KNOWLEDGE 
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.5-pro",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
         responseSchema: responseSchema,
         temperature: 0.7,
+        thinkingConfig: { thinkingBudget: 32768 },
       },
     });
 
@@ -334,8 +335,7 @@ export const getTacticImprovementSuggestion = async (
         if (detailLevel === 'scores_only') {
             return `vs ${m.opponent}: ${m.score}`;
         }
-        const pitchControlStat = m.pitchControl !== undefined ? `, PC: ${m.pitchControl}%` : '';
-        return `vs ${m.opponent}: ${m.score}, Poss: ${m.possession}%${pitchControlStat}, Shots: ${m.shots}(${m.shotsOnTarget})`;
+        return `vs ${m.opponent}: ${m.score}, Poss: ${m.possession}%, Pitch Control: ${m.pitchControl ?? 'N/A'}%, Shots: ${m.shots}(${m.shotsOnTarget})`;
     }).join('; ');
 
     const historyPromptSection = detailLevel === 'scores_only'
@@ -364,19 +364,20 @@ export const getTacticImprovementSuggestion = async (
     ${historySummary}
 
     INSTRUCTIONS:
-    1.  **Analyze Performance**: Based on the match data, identify the tactic's main weaknesses. Pay close attention to 'Pitch Control' (PC). High possession but low pitch control suggests ineffective, sterile possession that doesn't lead to dangerous situations. Low possession but high pitch control indicates an effective counter-attacking style.
-    2.  **Suggest Key Changes**: Propose a few (1-4) specific, high-impact changes to the tactic's instructions or key player roles. For instance, if possession is high but pitch control is low, suggest more direct passing or shooting on sight. The suggested changes MUST come from the options in the TACTICAL GUIDE.
-    3.  **Justify Your Suggestions**: Explain how your proposed changes will address the identified weaknesses, referencing stats like possession vs. pitch control.
+    1.  **Analyze Performance**: Based on the match data, identify the tactic's main weaknesses. For example, high possession without many shots on target could suggest ineffective, sterile possession that doesn't lead to dangerous situations. Low possession but high shots on target could indicate an effective counter-attacking style.
+    2.  **Suggest Key Changes**: Propose a few (1-4) specific, high-impact changes to the tactic's instructions or key player roles. For instance, if possession is high but shots are low, suggest more direct passing or shooting on sight. The suggested changes MUST come from the options in the TACTICAL GUIDE.
+    3.  **Justify Your Suggestions**: Explain how your proposed changes will address the identified weaknesses, referencing stats like possession and shots.
     `;
 
     try {
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-2.5-pro",
             contents: prompt,
             config: {
                 responseMimeType: "application/json",
                 responseSchema: improvementSchema,
                 temperature: 0.5,
+                thinkingConfig: { thinkingBudget: 32768 },
             },
         });
 
@@ -572,7 +573,7 @@ export const synthesizeKnowledge = async (matchHistory: MatchData[]): Promise<st
           if (scoreParts[0] > scoreParts[1]) result = 'W';
           if (scoreParts[0] < scoreParts[1]) result = 'L';
       }
-      return `vs ${m.opponent}: ${m.score} (${result}) using ${m.tacticUsed}. Stats: Poss ${m.possession}%, Shots ${m.shots}(${m.shotsOnTarget}).`;
+      return `vs ${m.opponent}: ${m.score} (${result}) using ${m.tacticUsed}. Stats: Poss ${m.possession}%, Pitch Control ${m.pitchControl ?? 'N/A'}%, Shots ${m.shots}(${m.shotsOnTarget}).`;
   }).join('\n');
 
   const prompt = `
@@ -594,10 +595,11 @@ The output should be a plain text summary, not JSON.
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.5-pro",
       contents: prompt,
       config: {
         temperature: 0.5,
+        thinkingConfig: { thinkingBudget: 32768 },
       },
     });
 
@@ -610,4 +612,40 @@ The output should be a plain text summary, not JSON.
     console.error("Error calling Gemini API for knowledge synthesis:", error);
     throw new Error("Failed to synthesize knowledge from Gemini API.");
   }
+};
+
+export const analyzeGenericImage = async (imageDataUrl: string, prompt: string): Promise<string> => {
+    const match = imageDataUrl.match(/^data:(.+);base64,(.+)$/);
+    if (!match) {
+        throw new Error("Invalid image data URL format.");
+    }
+    const imagePart = { inlineData: { mimeType: match[1], data: match[2] } };
+    const textPart = { text: prompt };
+    
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: { parts: [textPart, imagePart] },
+        });
+        return response.text;
+    } catch (error) {
+        console.error("Error calling Gemini API for generic image analysis:", error);
+        throw new Error("Failed to analyze image with Gemini API.");
+    }
+};
+
+export const transcribeAudio = async (audioData: {mimeType: string, data: string}): Promise<string> => {
+    const audioPart = { inlineData: audioData };
+    const textPart = { text: "Transcribe the following audio recording precisely and accurately." };
+    
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: { parts: [textPart, audioPart] },
+        });
+        return response.text;
+    } catch (error) {
+        console.error("Error calling Gemini API for audio transcription:", error);
+        throw new Error("Failed to transcribe audio with Gemini API.");
+    }
 };

@@ -49,7 +49,6 @@ export interface MatchData {
   opponent: string;
   score: string;
   possession: number;
-  pitchControl?: number;
   shots: number;
   shotsOnTarget: number;
   notes: string;
@@ -57,6 +56,7 @@ export interface MatchData {
   opponentPossession?: number;
   opponentShots?: number;
   opponentShotsOnTarget?: number;
+  pitchControl?: number;
 }
 
 export interface Player {

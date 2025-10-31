@@ -350,7 +350,7 @@ export const MatchPerformanceTracker: React.FC<MatchPerformanceTrackerProps> = (
                           </div>
                           <div>
                               <label htmlFor="pitchControl" className="block text-sm font-medium text-gray-300">Pitch Control %</label>
-                              <input type="number" name="pitchControl" id="pitchControl" value={newMatch.pitchControl ?? ''} onChange={handleChange} placeholder="50" className="mt-1 block w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white" />
+                              <input type="number" name="pitchControl" id="pitchControl" value={newMatch.pitchControl ?? 50} onChange={handleChange} className="mt-1 block w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white" />
                           </div>
                            <div>
                               <label htmlFor="shots" className="block text-sm font-medium text-gray-300">Shots</label>
@@ -450,7 +450,7 @@ export const MatchPerformanceTracker: React.FC<MatchPerformanceTrackerProps> = (
                     <div className="flex-grow min-w-0">
                         <p className="truncate"><b>#{match.matchNumber}:</b> {match.tacticUsed} vs {match.opponent} (<b>{match.score}</b>)</p>
                         <div className="text-xs text-gray-400 mt-1">
-                          <p><span className="font-semibold text-gray-300">You:</span> Poss: {match.possession}%{match.pitchControl !== undefined ? `, PC: ${match.pitchControl}%` : ''}, Shots: {match.shots} ({match.shotsOnTarget})</p>
+                          <p><span className="font-semibold text-gray-300">You:</span> Poss: {match.possession}%, Pitch Control: {match.pitchControl ?? 'N/A'}%, Shots: {match.shots} ({match.shotsOnTarget})</p>
                           {(match.opponentPossession !== undefined || match.opponentShots !== undefined) && (
                               <p><span className="font-semibold text-gray-300">Opp:</span> Poss: {match.opponentPossession ?? 'N/A'}%, Shots: {match.opponentShots ?? 'N/A'} ({match.opponentShotsOnTarget ?? 'N/A'})</p>
                           )}

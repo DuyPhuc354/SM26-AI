@@ -13,6 +13,9 @@ import { Badges } from './components/Badges';
 import { UpdateNotification } from './components/UpdateNotification';
 import { PlayerRoleFinder } from './components/PlayerRoleFinder';
 import { KnowledgeManager } from './components/KnowledgeManager';
+import { ChatBot } from './components/ChatBot';
+import { ImageAnalyzer } from './components/ImageAnalyzer';
+import { AudioTranscriber } from './components/AudioTranscriber';
 import { guideContent, communityTactics, tips } from './constants';
 import { synthesizeKnowledge } from './services/geminiService';
 import type { DetailedTactic, MatchData, Badge, TacticImprovementSuggestion } from './types';
@@ -30,6 +33,7 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [aiKnowledge, setAiKnowledge] = useState<string>('');
   const [isGeneratingKnowledge, setIsGeneratingKnowledge] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -383,6 +387,8 @@ const App: React.FC = () => {
                     onImport={handleImportKnowledge}
                     onExport={handleExportKnowledge}
                 />
+                <ImageAnalyzer />
+                <AudioTranscriber />
               </div>
               <div className="space-y-8">
                 <MatchPredictor />
@@ -416,6 +422,22 @@ const App: React.FC = () => {
       <footer className="text-center py-4 mt-8 text-gray-500 text-sm">
         <p>Built for Soccer Manager Enthusiasts</p>
       </footer>
+
+      {isChatOpen && <ChatBot onClose={() => setIsChatOpen(false)} />}
+      <button
+        onClick={() => {
+          setIsChatOpen(!isChatOpen);
+          navigator.vibrate?.(30);
+        }}
+        className="fixed bottom-6 right-6 bg-[var(--color-accent-600)] hover:bg-[var(--color-accent-700)] text-white w-16 h-16 rounded-full shadow-lg flex items-center justify-center z-50 transform transition-transform hover:scale-110"
+        aria-label={isChatOpen ? 'Close Chat' : 'Open Chat'}
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M2 5a2 2 0 012-2h7a2 2 0 012 2v4a2 2 0 01-2 2H9l-3 3v-3H4a2 2 0 01-2-2V5z" />
+          <path d="M15 7v2a4 4 0 01-4 4H9.828l-1.766 1.767c.28.149.599.233.938.233h7a2 2 0 002-2V9a2 2 0 00-2-2h-1z" />
+        </svg>
+      </button>
+
       {isImporterOpen && (
         <TacticImporter 
           onClose={() => setIsImporterOpen(false)}
