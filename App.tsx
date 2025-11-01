@@ -68,15 +68,43 @@ const App: React.FC = () => {
   const triggerVibration = () => navigator.vibrate?.(50);
 
   const handleSaveTactic = (tactic: DetailedTactic) => {
-    if (savedTactics.some(st => st.tacticName === tactic.tacticName)) {
-      alert(`A tactic with the name "${tactic.tacticName}" already exists. Please choose a different name.`);
-      return;
+    const existingTactic = savedTactics.find(st => st.tacticName === tactic.tacticName);
+
+    if (existingTactic) {
+        if (window.confirm(`A tactic with the name "${tactic.tacticName}" already exists. Do you want to overwrite it?`)) {
+            // Overwrite
+            const updatedTactics = savedTactics.map(st => st.tacticName === tactic.tacticName ? tactic : st);
+            setSavedTactics(updatedTactics);
+            localStorage.setItem('sm26_saved_tactics', JSON.stringify(updatedTactics));
+            triggerVibration();
+        } else if (window.confirm('Do you want to save it as a new version instead? (e.g., v2, v3)')) {
+            // Save as new version
+            const baseName = tactic.tacticName.replace(/\s+v\d+(\.\d+)?$/, '').trim();
+            let version = 2;
+            let newName = `${baseName} v${version}`;
+
+            const existingNames = savedTactics.map(t => t.tacticName);
+            while (existingNames.includes(newName)) {
+                version++;
+                newName = `${baseName} v${version}`;
+            }
+            
+            const newTactic = { ...tactic, tacticName: newName };
+            const updatedTactics = [...savedTactics, newTactic];
+            setSavedTactics(updatedTactics);
+            localStorage.setItem('sm26_saved_tactics', JSON.stringify(updatedTactics));
+            triggerVibration();
+        }
+        return; // Either way, we stop here.
     }
+
+    // Tactic does not exist, save normally.
     const updatedTactics = [...savedTactics, tactic];
     setSavedTactics(updatedTactics);
     localStorage.setItem('sm26_saved_tactics', JSON.stringify(updatedTactics));
     triggerVibration();
   };
+
 
   const handleImportTactic = (tactic: DetailedTactic) => {
     handleSaveTactic(tactic);
@@ -218,7 +246,7 @@ const App: React.FC = () => {
         const newTactic = JSON.parse(JSON.stringify(tactic));
         const { general, attack, defence, keyRoles } = changes.suggestedChanges;
 
-        const instructionChangeRegex = /change\s+([\w\s]+)\s+from\s+.+?\s+to\s+([\w\s\d.-]+)/i;
+        const instructionChangeRegex = /change the '([\w\s]+)' instruction from '(.+?)' to '(.+?)\.'/i;
         
         const applyInstructionChange = (instructionString: string, change: string | undefined): string => {
             if (!change) return instructionString;
@@ -226,9 +254,9 @@ const App: React.FC = () => {
             const match = change.match(instructionChangeRegex);
             if (!match) return instructionString;
             
-            const [, rawInstructionName, rawNewValue] = match;
+            const [, rawInstructionName, rawOldValue, rawNewValue] = match;
             const instructionName = rawInstructionName.trim();
-            const newValue = rawNewValue.trim().replace(/[.,]$/, '');
+            const newValue = rawNewValue.trim();
 
             const instructions: Record<string, string> = {};
             const originalKeys: string[] = [];
@@ -243,8 +271,9 @@ const App: React.FC = () => {
                     }
                 }
             });
-
-            const keyToUpdate = Object.keys(instructions).find(k => k.toLowerCase() === instructionName.toLowerCase());
+            
+            // This is a simplified search; a more robust version might normalize keys
+            const keyToUpdate = Object.keys(instructions).find(k => k.toLowerCase().replace(/\s/g, '') === instructionName.toLowerCase().replace(/\s/g, ''));
 
             if (keyToUpdate) {
                 instructions[keyToUpdate] = newValue;
@@ -345,20 +374,30 @@ const App: React.FC = () => {
       <main className="container mx-auto px-4 py-8">
         <div className={activeTab === 'dashboard' ? '' : 'hidden'}>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <InteractiveAssistant onSaveTactic={handleSaveTactic} matchHistory={matchHistory} knowledge={aiKnowledge} />
-            <MatchPerformanceTracker
-              matchHistory={matchHistory}
-              allTactics={allTactics}
-              onAddMatch={handleAddMatch}
-              onAddMatches={handleAddMatches}
-              onDeleteMatch={handleDeleteMatch}
-              onClearHistory={handleClearHistory}
-              onOpenHistoryImporter={() => {
-                setIsHistoryImporterOpen(true);
-                navigator.vibrate?.(20);
-              }}
-              onSaveNewVersion={handleSaveTacticVersion}
-            />
+              <div className="space-y-8">
+                  <InteractiveAssistant onSaveTactic={handleSaveTactic} matchHistory={matchHistory} knowledge={aiKnowledge} />
+                   <KnowledgeManager
+                      knowledge={aiKnowledge}
+                      isGenerating={isGeneratingKnowledge}
+                      onGenerate={handleGenerateKnowledge}
+                      onImport={handleImportKnowledge}
+                      onExport={handleExportKnowledge}
+                  />
+              </div>
+              <MatchPerformanceTracker
+                matchHistory={matchHistory}
+                allTactics={allTactics}
+                onAddMatch={handleAddMatch}
+                onAddMatches={handleAddMatches}
+                onDeleteMatch={handleDeleteMatch}
+                onClearHistory={handleClearHistory}
+                onOpenHistoryImporter={() => {
+                  setIsHistoryImporterOpen(true);
+                  navigator.vibrate?.(20);
+                }}
+                onSaveNewVersion={handleSaveTacticVersion}
+                onUpdateKnowledge={handleUpdateKnowledge}
+              />
           </div>
         </div>
 
@@ -380,13 +419,6 @@ const App: React.FC = () => {
               <div className="space-y-8">
                 <FormationPlanner />
                 <PlayerRoleFinder />
-                <KnowledgeManager
-                    knowledge={aiKnowledge}
-                    isGenerating={isGeneratingKnowledge}
-                    onGenerate={handleGenerateKnowledge}
-                    onImport={handleImportKnowledge}
-                    onExport={handleExportKnowledge}
-                />
                 <ImageAnalyzer />
                 <AudioTranscriber />
               </div>

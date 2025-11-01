@@ -1,19 +1,7 @@
-
 import React, { useState, useEffect, useRef } from 'react';
-import type { MatchData, DetailedTactic, TacticImprovementSuggestion } from '../types';
-import { getTacticImprovementSuggestion, analyzeMatchImage, analyzeMatchHistoryImage } from '../services/geminiService';
+import type { MatchData, DetailedTactic, TacticImprovementSuggestion, MatchPerformanceTrackerProps } from '../types';
+import { getTacticImprovementSuggestion, analyzeMatchImage, analyzeMatchHistoryImage, synthesizeKnowledge } from '../services/geminiService';
 import { TacticImprovementModal } from './TacticImprovementModal';
-
-interface MatchPerformanceTrackerProps {
-  matchHistory: MatchData[];
-  allTactics: DetailedTactic[];
-  onAddMatch: (match: Omit<MatchData, 'id' | 'matchNumber'>) => void;
-  onAddMatches: (matches: Omit<MatchData, 'id' | 'matchNumber'>[]) => void;
-  onDeleteMatch: (matchId: string) => void;
-  onClearHistory: () => void;
-  onOpenHistoryImporter: () => void;
-  onSaveNewVersion: (originalTactic: DetailedTactic, suggestion: TacticImprovementSuggestion) => void;
-}
 
 const initialMatchState: Omit<MatchData, 'id' | 'matchNumber'> = {
   tacticUsed: '',
@@ -30,8 +18,9 @@ const initialMatchState: Omit<MatchData, 'id' | 'matchNumber'> = {
 const DRAFT_KEY = 'sm26_match_form_draft';
 
 export const MatchPerformanceTracker: React.FC<MatchPerformanceTrackerProps> = ({
-  matchHistory, allTactics, onAddMatch, onAddMatches, onDeleteMatch, onClearHistory, onOpenHistoryImporter, onSaveNewVersion
+  matchHistory, allTactics, onAddMatch, onAddMatches, onDeleteMatch, onClearHistory, onOpenHistoryImporter, onSaveNewVersion, onUpdateKnowledge
 }) => {
+  const [view, setView] = useState<'log' | 'analyze'>('log');
   const [newMatch, setNewMatch] = useState<Omit<MatchData, 'id' | 'matchNumber'>>(initialMatchState);
   const [error, setError] = useState('');
   const [step, setStep] = useState(0);
@@ -42,6 +31,8 @@ export const MatchPerformanceTracker: React.FC<MatchPerformanceTrackerProps> = (
   const [analysisError, setAnalysisError] = useState('');
   const [suggestion, setSuggestion] = useState<TacticImprovementSuggestion | null>(null);
   const [analysisDetail, setAnalysisDetail] = useState<'full' | 'scores_only'>('full');
+  const [selectedVersions, setSelectedVersions] = useState<string[]>([]);
+  const [availableVersions, setAvailableVersions] = useState<DetailedTactic[]>([]);
 
   // Image Scan State
   const [isScanning, setIsScanning] = useState(false);
@@ -106,6 +97,20 @@ export const MatchPerformanceTracker: React.FC<MatchPerformanceTrackerProps> = (
     }
   }, [allTactics, bulkImportTactic]);
 
+  // Find previous versions of tactic for analysis
+  useEffect(() => {
+    if (!tacticToAnalyze) {
+      setAvailableVersions([]);
+      return;
+    }
+    const baseName = tacticToAnalyze.replace(/\s+v\d+(\.\d+)?$/, '').trim();
+    const versions = allTactics
+      .filter(t => t.tacticName.startsWith(baseName) && t.tacticName !== tacticToAnalyze)
+      .sort((a, b) => a.tacticName.localeCompare(b.tacticName, undefined, { numeric: true }));
+    setAvailableVersions(versions);
+    setSelectedVersions([]); // Reset selection when main tactic changes
+  }, [tacticToAnalyze, allTactics]);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     const type = 'type' in e.target ? e.target.type : '';
@@ -115,6 +120,14 @@ export const MatchPerformanceTracker: React.FC<MatchPerformanceTrackerProps> = (
     }));
   };
   
+  const handleVersionSelection = (tacticName: string) => {
+    setSelectedVersions(prev =>
+      prev.includes(tacticName)
+        ? prev.filter(name => name !== tacticName)
+        : [...prev, tacticName]
+    );
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -225,14 +238,25 @@ export const MatchPerformanceTracker: React.FC<MatchPerformanceTrackerProps> = (
       return;
     }
 
+    const historicalTactics = allTactics.filter(t => selectedVersions.includes(t.tacticName));
+
     navigator.vibrate?.(30);
     setIsAnalyzing(true);
     setAnalysisError('');
     setSuggestion(null);
 
     try {
-      const result = await getTacticImprovementSuggestion(tactic, matchHistory, analysisDetail);
+      const result = await getTacticImprovementSuggestion(tactic, historicalTactics, matchHistory, analysisDetail);
       setSuggestion(result);
+
+      // Auto-update knowledge base after successful analysis
+      const allTacticNamesForAnalysis = [tacticToAnalyze, ...selectedVersions];
+      const allMatchesForKnowledge = matchHistory.filter(m => allTacticNamesForAnalysis.includes(m.tacticUsed));
+
+      if (allMatchesForKnowledge.length >= 3) { // Only update if there's enough data
+        const newKnowledge = await synthesizeKnowledge(allMatchesForKnowledge);
+        onUpdateKnowledge(newKnowledge);
+      }
     } catch (err) {
       setAnalysisError(err instanceof Error ? err.message : "An unknown error occurred.");
     } finally {
@@ -289,7 +313,7 @@ export const MatchPerformanceTracker: React.FC<MatchPerformanceTrackerProps> = (
 
     setScannedMatches(null);
   };
-
+  
   const tacticForAnalysis = allTactics.find(t => t.tacticName === tacticToAnalyze);
   const wizardSteps = ["Tactic", "Images", "Details"];
 
@@ -391,39 +415,33 @@ export const MatchPerformanceTracker: React.FC<MatchPerformanceTrackerProps> = (
 
   return (
     <div className="bg-gray-800 rounded-lg shadow-lg p-6">
-      <h2 className="text-xl font-bold text-[var(--color-text-accent)] mb-4">Match Performance Tracker</h2>
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-4 gap-y-2">
+        <h2 className="text-xl font-bold text-[var(--color-text-accent)]">Performance Center</h2>
+        <div className="flex items-center gap-x-1 p-1 bg-gray-900 rounded-md text-sm">
+            <button onClick={() => setView('log')} className={`px-3 py-1 rounded-md transition-colors ${view === 'log' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:bg-gray-800'}`}>Log Match</button>
+            <button onClick={() => setView('analyze')} disabled={matchHistory.length === 0} className={`px-3 py-1 rounded-md transition-colors ${view === 'analyze' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:bg-gray-800'} disabled:opacity-50 disabled:cursor-not-allowed`}>AI Analysis</button>
+        </div>
+      </div>
       
-      <div className="bg-gray-900/50 p-4 rounded-lg">
+      {view === 'log' && (
+        <div className="bg-gray-900/50 p-4 rounded-lg">
           <div className="flex justify-between items-center mb-3">
             <h3 className="font-semibold text-lg text-white">Log Next Match (Match #{matchHistory.length > 0 ? Math.max(...matchHistory.map(m => m.matchNumber)) + 1 : 1})</h3>
-            <button 
-                type="button" 
-                onClick={handleClearDraft}
-                className="text-xs bg-gray-600 hover:bg-gray-700 text-white font-bold py-1 px-2 rounded-md transition-colors"
-                aria-label="Clear and reset the match form"
-            >
-                Clear Form
-            </button>
+            <button type="button" onClick={handleClearDraft} className="text-xs bg-gray-600 hover:bg-gray-700 text-white font-bold py-1 px-2 rounded-md transition-colors" aria-label="Clear and reset the match form">Clear Form</button>
           </div>
-
           <div className="flex items-center justify-center mb-4">
               {wizardSteps.map((s, index) => (
                   <React.Fragment key={s}>
                       <div className="flex items-center">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${step >= index ? 'bg-[var(--color-accent-600)] text-white' : 'bg-gray-700 text-gray-400'}`}>
-                              {index + 1}
-                          </div>
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${step >= index ? 'bg-[var(--color-accent-600)] text-white' : 'bg-gray-700 text-gray-400'}`}>{index + 1}</div>
                           <p className={`ml-2 text-sm ${step >= index ? 'text-white' : 'text-gray-500'}`}>{s}</p>
                       </div>
                       {index < wizardSteps.length - 1 && <div className={`flex-auto border-t-2 mx-2 ${step > index ? 'border-[var(--color-accent-500)]' : 'border-gray-700'}`}></div>}
                   </React.Fragment>
               ))}
           </div>
-          
           <form onSubmit={handleSubmit}>
-              <div className="min-h-[150px]">
-                {renderCurrentStep()}
-              </div>
+              <div className="min-h-[150px]">{renderCurrentStep()}</div>
               {error && <p className="text-red-400 text-sm mt-2 text-center">{error}</p>}
               <div className="flex justify-between items-center pt-4 mt-4 border-t border-gray-700">
                   <button type="button" onClick={() => { setStep(s => s - 1); navigator.vibrate?.(20); }} disabled={step === 0} className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md disabled:opacity-50">Back</button>
@@ -433,9 +451,10 @@ export const MatchPerformanceTracker: React.FC<MatchPerformanceTrackerProps> = (
                   }
               </div>
           </form>
-      </div>
+        </div>
+      )}
       
-      {matchHistory.length > 0 && (
+      {view === 'log' && matchHistory.length > 0 && (
         <div className="mt-6 border-t border-gray-700 pt-4">
           <h3 className="font-semibold text-lg text-white mb-2">Match History</h3>
           <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
@@ -476,111 +495,34 @@ export const MatchPerformanceTracker: React.FC<MatchPerformanceTrackerProps> = (
         </div>
       )}
 
-      {matchHistory.length > 0 && allTactics.length > 0 && (
+      {view === 'analyze' && (
         <div className="mt-6 border-t border-gray-700 pt-4">
             <h3 className="font-semibold text-lg text-white mb-2">AI Tactical Analysis</h3>
-            <p className="text-sm text-gray-400 mb-3">Select a tactic and detail level to get AI-powered improvement suggestions based on your match history.</p>
-            
+            <p className="text-sm text-gray-400 mb-3">Select a tactic and its previous versions to get AI-powered improvement suggestions based on your match history.</p>
             <fieldset className="mb-3">
                 <legend className="text-sm font-medium text-gray-300 mb-1">Analysis Detail Level</legend>
                 <div className="flex gap-x-4">
-                    <label className="flex items-center text-sm text-gray-400 cursor-pointer">
-                        <input 
-                        type="radio" 
-                        name="analysisDetail" 
-                        value="full" 
-                        checked={analysisDetail === 'full'} 
-                        onChange={() => setAnalysisDetail('full')} 
-                        className="w-4 h-4 text-[var(--color-accent-600)] bg-gray-700 border-gray-600 focus:ring-[var(--color-accent-500)]" 
-                        />
-                        <span className="ml-2">Full Match Details</span>
-                    </label>
-                    <label className="flex items-center text-sm text-gray-400 cursor-pointer">
-                        <input 
-                        type="radio" 
-                        name="analysisDetail" 
-                        value="scores_only" 
-                        checked={analysisDetail === 'scores_only'} 
-                        onChange={() => setAnalysisDetail('scores_only')} 
-                        className="w-4 h-4 text-[var(--color-accent-600)] bg-gray-700 border-gray-600 focus:ring-[var(--color-accent-500)]" 
-                        />
-                        <span className="ml-2">Scores Only</span>
-                    </label>
+                    <label className="flex items-center text-sm text-gray-400 cursor-pointer"><input type="radio" name="analysisDetail" value="full" checked={analysisDetail === 'full'} onChange={() => setAnalysisDetail('full')} className="w-4 h-4 text-[var(--color-accent-600)] bg-gray-700 border-gray-600 focus:ring-[var(--color-accent-500)]" /><span className="ml-2">Full Match Details</span></label>
+                    <label className="flex items-center text-sm text-gray-400 cursor-pointer"><input type="radio" name="analysisDetail" value="scores_only" checked={analysisDetail === 'scores_only'} onChange={() => setAnalysisDetail('scores_only')} className="w-4 h-4 text-[var(--color-accent-600)] bg-gray-700 border-gray-600 focus:ring-[var(--color-accent-500)]" /><span className="ml-2">Scores Only</span></label>
                 </div>
             </fieldset>
-
             <div className="flex gap-2">
-                <select 
-                    value={tacticToAnalyze} 
-                    onChange={e => setTacticToAnalyze(e.target.value)}
-                    className="flex-grow p-2 bg-gray-700 border border-gray-600 rounded-md text-white"
-                >
-                    {allTactics.map(t => <option key={t.tacticName} value={t.tacticName}>{t.tacticName}</option>)}
-                </select>
-                <button 
-                    onClick={handleAnalyzeTactic} 
-                    disabled={isAnalyzing}
-                    className="bg-[var(--color-accent-600)] hover:bg-[var(--color-accent-700)] disabled:bg-gray-500 text-white font-bold py-2 px-4 rounded-md"
-                >
-                    {isAnalyzing ? 'Analyzing...' : 'Analyze'}
-                </button>
+                <select value={tacticToAnalyze} onChange={e => setTacticToAnalyze(e.target.value)} className="flex-grow p-2 bg-gray-700 border border-gray-600 rounded-md text-white">{allTactics.map(t => <option key={t.tacticName} value={t.tacticName}>{t.tacticName}</option>)}</select>
+                <button onClick={handleAnalyzeTactic} disabled={isAnalyzing} className="bg-[var(--color-accent-600)] hover:bg-[var(--color-accent-700)] disabled:bg-gray-500 text-white font-bold py-2 px-4 rounded-md">{isAnalyzing ? 'Analyzing...' : 'Analyze & Learn'}</button>
             </div>
+            {availableVersions.length > 0 && (
+                <div className="mt-3 p-3 bg-gray-900/50 rounded-md">
+                    <h4 className="text-sm font-medium text-gray-300 mb-2">Include previous versions in analysis:</h4>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{availableVersions.map(v => (<label key={v.tacticName} className="flex items-center text-sm text-gray-400 cursor-pointer bg-gray-700 p-2 rounded-md hover:bg-gray-600"><input type="checkbox" checked={selectedVersions.includes(v.tacticName)} onChange={() => handleVersionSelection(v.tacticName)} className="w-4 h-4 text-[var(--color-accent-600)] bg-gray-600 border-gray-500 rounded focus:ring-[var(--color-accent-500)]" /><span className="ml-2 truncate">{v.tacticName}</span></label>))}</div>
+                </div>
+            )}
             {analysisError && <p className="text-red-400 text-sm mt-2">{analysisError}</p>}
         </div>
       )}
 
-      {suggestion && tacticForAnalysis && (
-        <TacticImprovementModal 
-            suggestion={suggestion} 
-            originalTactic={tacticForAnalysis} 
-            onClose={() => setSuggestion(null)}
-            onSaveNewVersion={onSaveNewVersion}
-        />
-      )}
-      
-      {viewingImages && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => { setViewingImages(null); navigator.vibrate?.(20); }}>
-            <div className="bg-gray-900 p-4 rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh]" onClick={e => e.stopPropagation()}>
-                <h3 className="text-lg font-bold text-white mb-4">Match Screenshots ({viewingImages.length})</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto max-h-[calc(90vh-80px)]">
-                  {viewingImages.map((image, index) => (
-                    <img key={index} src={image} alt={`Match Screenshot ${index + 1}`} className="w-full h-auto object-contain rounded-md"/>
-                  ))}
-                </div>
-            </div>
-        </div>
-      )}
-
-      {scannedMatches && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => { setScannedMatches(null); navigator.vibrate?.(20); }}>
-            <div className="bg-gray-800 p-6 rounded-lg shadow-xl max-w-lg w-full" onClick={e => e.stopPropagation()}>
-                <h3 className="text-xl font-bold text-white mb-3">Confirm Scanned Matches</h3>
-                <p className="text-gray-400 mb-4">The AI found {scannedMatches.length} matches. Please select the tactic used for these games and confirm to import.</p>
-                <div className="mb-4">
-                    <label htmlFor="bulkImportTactic" className="block text-sm font-medium text-gray-300 mb-1">Tactic Used</label>
-                    <select id="bulkImportTactic" value={bulkImportTactic} onChange={e => setBulkImportTactic(e.target.value)} className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white">
-                       {allTactics.map(t => <option key={t.tacticName} value={t.tacticName}>{t.tacticName}</option>)}
-                    </select>
-                </div>
-                <div className="max-h-60 overflow-y-auto bg-gray-900/50 p-2 rounded-md mb-4">
-                    <table className="w-full text-sm text-left">
-                        <thead className="text-xs text-gray-400 uppercase">
-                            <tr><th className="px-4 py-2">Opponent</th><th className="px-4 py-2">Score</th></tr>
-                        </thead>
-                        <tbody className="text-white">
-                            {scannedMatches.map((match, index) => (
-                                <tr key={index} className="border-b border-gray-700"><td className="px-4 py-2">{match.opponent}</td><td className="px-4 py-2">{match.score}</td></tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-                <div className="flex justify-end gap-x-3">
-                    <button onClick={() => { setScannedMatches(null); navigator.vibrate?.(20); }} className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md">Cancel</button>
-                    <button onClick={handleConfirmBulkImport} className="bg-[var(--color-accent-600)] hover:bg-[var(--color-accent-700)] text-white font-bold py-2 px-4 rounded-md">Import {scannedMatches.length} Matches</button>
-                </div>
-            </div>
-        </div>
-      )}
+      {suggestion && tacticForAnalysis && <TacticImprovementModal suggestion={suggestion} originalTactic={tacticForAnalysis} onClose={() => setSuggestion(null)} onSaveNewVersion={onSaveNewVersion}/>}
+      {viewingImages && (<div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => { setViewingImages(null); navigator.vibrate?.(20); }}><div className="bg-gray-900 p-4 rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh]" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-4">Match Screenshots ({viewingImages.length})</h3><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto max-h-[calc(90vh-80px)]">{viewingImages.map((image, index) => (<img key={index} src={image} alt={`Match Screenshot ${index + 1}`} className="w-full h-auto object-contain rounded-md"/>))}</div></div></div>)}
+      {scannedMatches && (<div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => { setScannedMatches(null); navigator.vibrate?.(20); }}><div className="bg-gray-800 p-6 rounded-lg shadow-xl max-w-lg w-full" onClick={e => e.stopPropagation()}><h3 className="text-xl font-bold text-white mb-3">Confirm Scanned Matches</h3><p className="text-gray-400 mb-4">The AI found {scannedMatches.length} matches. Please select the tactic used for these games and confirm to import.</p><div className="mb-4"><label htmlFor="bulkImportTactic" className="block text-sm font-medium text-gray-300 mb-1">Tactic Used</label><select id="bulkImportTactic" value={bulkImportTactic} onChange={e => setBulkImportTactic(e.target.value)} className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white">{allTactics.map(t => <option key={t.tacticName} value={t.tacticName}>{t.tacticName}</option>)}</select></div><div className="max-h-60 overflow-y-auto bg-gray-900/50 p-2 rounded-md mb-4"><table className="w-full text-sm text-left"><thead className="text-xs text-gray-400 uppercase"><tr><th className="px-4 py-2">Opponent</th><th className="px-4 py-2">Score</th></tr></thead><tbody className="text-white">{scannedMatches.map((match, index) => (<tr key={index} className="border-b border-gray-700"><td className="px-4 py-2">{match.opponent}</td><td className="px-4 py-2">{match.score}</td></tr>))}</tbody></table></div><div className="flex justify-end gap-x-3"><button onClick={() => { setScannedMatches(null); navigator.vibrate?.(20); }} className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md">Cancel</button><button onClick={handleConfirmBulkImport} className="bg-[var(--color-accent-600)] hover:bg-[var(--color-accent-700)] text-white font-bold py-2 px-4 rounded-md">Import {scannedMatches.length} Matches</button></div></div></div>)}
     </div>
   );
 };

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { DetailedTactic } from '../types';
+import { AccordionItem } from './Accordion';
 
 const ShareTacticModal: React.FC<{tactic: DetailedTactic, onClose: () => void}> = ({ tactic, onClose }) => {
   const [textCopied, setTextCopied] = useState(false);
@@ -308,22 +309,38 @@ export const TacticsLibrary: React.FC<{
       isSelectionDisabled: selectedToCompare.length >= 2,
   });
 
-  const filterAndSortSavedTactics = (tactics: DetailedTactic[]) => {
-    const filtered = tactics.filter(tactic =>
-      (tactic.tacticName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-       tactic.formation.toLowerCase().includes(searchQuery.toLowerCase())) &&
-      (!showFavoritesOnly || tactic.isFavorite)
-    );
-    // Sort favorites to the top
-    return filtered.sort((a, b) => (b.isFavorite ? 1 : 0) - (a.isFavorite ? 1 : 0));
-  };
-
   const filterCommunityTactics = (tactics: DetailedTactic[]) => tactics.filter(tactic =>
     tactic.tacticName.toLowerCase().includes(searchQuery.toLowerCase()) ||
     tactic.formation.toLowerCase().includes(searchQuery.toLowerCase())
   );
+  
+  // 1. Filter tactics based on search and favorite toggle
+  const filteredTactics = savedTactics.filter(tactic =>
+    (tactic.tacticName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+     tactic.formation.toLowerCase().includes(searchQuery.toLowerCase())) &&
+    (!showFavoritesOnly || tactic.isFavorite)
+  );
 
-  const displayedSavedTactics = filterAndSortSavedTactics(savedTactics);
+  // 2. Group the filtered tactics by base name
+  // FIX: Explicitly typed the accumulator for the reduce method to ensure correct type inference for the accumulator and resolve downstream errors.
+  const groupedTactics = filteredTactics.reduce((acc: Record<string, DetailedTactic[]>, tactic) => {
+      const baseName = tactic.tacticName.replace(/\s+v\d+(\.\d+)?$/, '').trim();
+      if (!acc[baseName]) {
+          acc[baseName] = [];
+      }
+      acc[baseName].push(tactic);
+      return acc;
+  }, {});
+
+  // 3. Create an array of groups and sort them (favorites first, then alphabetically)
+  const sortedGroupEntries = Object.entries(groupedTactics).sort(([baseNameA, tacticsA], [baseNameB, tacticsB]) => {
+      const hasFavoriteA = tacticsA.some(t => t.isFavorite);
+      const hasFavoriteB = tacticsB.some(t => t.isFavorite);
+      if (hasFavoriteA && !hasFavoriteB) return -1;
+      if (!hasFavoriteA && hasFavoriteB) return 1;
+      return baseNameA.localeCompare(baseNameB);
+  });
+
   const displayedCommunityTactics = filterCommunityTactics(communityTactics);
 
   return (
@@ -373,9 +390,21 @@ export const TacticsLibrary: React.FC<{
       {savedTactics.length > 0 && (
          <div className="mb-8">
             <h3 className="text-xl font-semibold text-gray-200 mb-3">Your Saved Tactics</h3>
-            <div className="space-y-4">
-              {displayedSavedTactics.length > 0 ? (
-                displayedSavedTactics.map(tactic => <TacticComponent {...commonTacticProps(tactic, true)} />)
+            <div className="space-y-2">
+              {sortedGroupEntries.length > 0 ? (
+                sortedGroupEntries.map(([baseName, tacticsInGroup]) => (
+                  <AccordionItem 
+                    key={baseName} 
+                    title={`${baseName} (${tacticsInGroup.length} version${tacticsInGroup.length > 1 ? 's' : ''})`}
+                  >
+                    <div className="space-y-4 p-2 bg-gray-800/50">
+                        {tacticsInGroup
+                            .sort((a, b) => a.tacticName.localeCompare(b.tacticName, undefined, { numeric: true }))
+                            .map(tactic => <TacticComponent {...commonTacticProps(tactic, true)} />)
+                        }
+                    </div>
+                  </AccordionItem>
+                ))
               ) : <p className="text-gray-400 text-center py-2">No saved tactics match your search.</p>}
             </div>
          </div>

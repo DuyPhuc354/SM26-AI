@@ -320,27 +320,54 @@ const improvementSchema = {
 };
   
 export const getTacticImprovementSuggestion = async (
-    tactic: DetailedTactic,
+    tacticToImprove: DetailedTactic,
+    historicalTactics: DetailedTactic[],
     history: MatchData[],
     detailLevel: 'full' | 'scores_only' = 'full'
 ): Promise<TacticImprovementSuggestion> => {
-    // Analyze all matches for the selected tactic, not just a recent slice.
+    const tactic = tacticToImprove;
     const relevantHistory = history.filter(m => m.tacticUsed === tactic.tacticName);
 
-    if (relevantHistory.length < 3) {
-        throw new Error("Not enough match data for this tactic. Please log at least 3 matches to get an analysis.");
+    if (relevantHistory.length < 3 && historicalTactics.length === 0) {
+        throw new Error("Not enough match data. Please log at least 3 matches for the latest version, or include previous versions in the analysis.");
     }
 
-    const historySummary = relevantHistory.map(m => {
+    const formatMatchSummary = (m: MatchData) => {
         if (detailLevel === 'scores_only') {
             return `vs ${m.opponent}: ${m.score}`;
         }
         return `vs ${m.opponent}: ${m.score}, Poss: ${m.possession}%, Pitch Control: ${m.pitchControl ?? 'N/A'}%, Shots: ${m.shots}(${m.shotsOnTarget})`;
-    }).join('; ');
+    };
+
+    const historySummary = relevantHistory.map(formatMatchSummary).join('; ');
+
+    let evolutionPrompt = '';
+    if (historicalTactics.length > 0) {
+        evolutionPrompt = `\n--- TACTIC EVOLUTION HISTORY ---\n`;
+        evolutionPrompt += `The user is providing the history of previous versions of this tactic. Analyze the changes between versions and their impact on performance to avoid repeating past mistakes and build on successes.\n\n`;
+        
+        const sortedHistoricalTactics = [...historicalTactics].sort((a,b) => a.tacticName.localeCompare(b.tacticName, undefined, { numeric: true }));
+        
+        for (const historicalTactic of sortedHistoricalTactics) {
+            evolutionPrompt += `VERSION: ${historicalTactic.tacticName}\n`;
+            evolutionPrompt += `- Key Roles: ${historicalTactic.keyRoles}\n`;
+            evolutionPrompt += `- General: ${historicalTactic.generalInstructions}\n`;
+            evolutionPrompt += `- Attack: ${historicalTactic.attackInstructions}\n`;
+            evolutionPrompt += `- Defence: ${historicalTactic.defenceInstructions}\n`;
+
+            const historicalMatches = history.filter(m => m.tacticUsed === historicalTactic.tacticName);
+            if (historicalMatches.length > 0) {
+                const historicalMatchSummary = historicalMatches.map(formatMatchSummary).join('; ');
+                evolutionPrompt += `  - RESULTS: ${historicalMatchSummary}\n\n`;
+            } else {
+                evolutionPrompt += `  - RESULTS: No matches logged for this version.\n\n`;
+            }
+        }
+    }
 
     const historyPromptSection = detailLevel === 'scores_only'
-        ? `MATCH RESULTS (scores only):`
-        : `MATCH HISTORY (full details):`;
+        ? `LATEST VERSION MATCH RESULTS (scores only):`
+        : `LATEST VERSION MATCH HISTORY (full details):`;
 
 
     const prompt = `
@@ -351,8 +378,8 @@ export const getTacticImprovementSuggestion = async (
     --- TACTICAL GUIDE ---
     ${SM_TACTICS_GUIDE_CONTEXT}
     --- END GUIDE ---
-
-    TACTIC TO ANALYZE:
+    ${evolutionPrompt}
+    TACTIC TO ANALYZE (LATEST VERSION):
     - Name: ${tactic.tacticName}
     - Formation: ${tactic.formation}
     - Key Roles: ${tactic.keyRoles}
@@ -364,9 +391,10 @@ export const getTacticImprovementSuggestion = async (
     ${historySummary}
 
     INSTRUCTIONS:
-    1.  **Analyze Performance**: Based on the match data, identify the tactic's main weaknesses. For example, high possession without many shots on target could suggest ineffective, sterile possession that doesn't lead to dangerous situations. Low possession but high shots on target could indicate an effective counter-attacking style.
-    2.  **Suggest Key Changes**: Propose a few (1-4) specific, high-impact changes to the tactic's instructions or key player roles. For instance, if possession is high but shots are low, suggest more direct passing or shooting on sight. The suggested changes MUST come from the options in the TACTICAL GUIDE.
-    3.  **Justify Your Suggestions**: Explain how your proposed changes will address the identified weaknesses, referencing stats like possession and shots.
+    1.  **Analyze Full History**: If a 'TACTIC EVOLUTION HISTORY' is provided, you MUST analyze the changes from one version to the next and how those changes impacted results. For example, did changing a 'Stopper' to a 'Ball-Playing Defender' lead to more goals conceded?
+    2.  **Analyze Latest Performance**: Based on the match data for the LATEST VERSION, identify its main weaknesses.
+    3.  **Suggest Evolutionary Changes**: Propose a few (1-4) specific, high-impact changes for the LATEST VERSION. These suggestions should represent the logical next step in the tactic's evolution, directly addressing the latest performance issues while respecting the historical context.
+    4.  **Justify Your Suggestions**: Explain *why* your proposed changes are the correct next step. Directly reference the performance of the latest version and explicitly state how the changes learn from the successes or failures of the transitions between previous versions (e.g., 'Moving back to 'Shoot on Sight' is recommended because the switch to 'Work ball into box' in v4, compared to v3, resulted in fewer shots without a significant increase in conversion rate.').
     `;
 
     try {
@@ -439,7 +467,7 @@ export const analyzeMatchImage = async (imageDataUrls: string[]): Promise<Partia
 
 **INSTRUCTIONS:**
 1.  **Identify User's Team:** A single team name will likely appear in all or most of the images if multiple matches from the same season are provided. This is the **user's team**. All other team names are opponents. This is a crucial step for correctly identifying the opponent. For example, if 'Liverpool' appears in 4 out of 5 images, 'Liverpool' is the user's team.
-2.  **Group and Extract:** Group screenshots that belong to the same match (e.g., one for score, one for stats). For each distinct match, extract the following information:
+2.  **Group and Extract:** Group screenshots that belong to the same match. If multiple images clearly relate to a single match (e.g., one shows the score, another shows stats), you MUST consolidate their data into a single match object. For each distinct match, extract the following information:
     - opponent: The name of the opponent team.
     - score: The final score.
     - possession: The user's team possession percentage.
@@ -459,7 +487,7 @@ export const analyzeMatchImage = async (imageDataUrls: string[]): Promise<Partia
 
     try {
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-2.5-pro",
             contents: { parts: [textPart, ...imageParts] },
             config: {
                 responseMimeType: "application/json",
@@ -544,7 +572,7 @@ For each match found, return an object containing:
 
     try {
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-2.5-pro",
             contents: { parts: [textPart, imagePart] },
             config: {
                 responseMimeType: "application/json",

@@ -1,4 +1,3 @@
-
 export interface TacticSuggestion {
   formation: string;
   general: {
@@ -100,4 +99,16 @@ export interface TacticImprovementSuggestion {
     keyRoles?: string;
   };
   justification: string;
+}
+
+export interface MatchPerformanceTrackerProps {
+  matchHistory: MatchData[];
+  allTactics: DetailedTactic[];
+  onAddMatch: (match: Omit<MatchData, 'id' | 'matchNumber'>) => void;
+  onAddMatches: (matches: Omit<MatchData, 'id' | 'matchNumber'>[]) => void;
+  onDeleteMatch: (matchId: string) => void;
+  onClearHistory: () => void;
+  onOpenHistoryImporter: () => void;
+  onSaveNewVersion: (originalTactic: DetailedTactic, suggestion: TacticImprovementSuggestion) => void;
+  onUpdateKnowledge: (newKnowledge: string) => void;
 }
