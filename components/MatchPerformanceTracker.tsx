@@ -33,6 +33,7 @@ export const MatchPerformanceTracker: React.FC<MatchPerformanceTrackerProps> = (
   const [analysisDetail, setAnalysisDetail] = useState<'full' | 'scores_only'>('full');
   const [selectedVersions, setSelectedVersions] = useState<string[]>([]);
   const [availableVersions, setAvailableVersions] = useState<DetailedTactic[]>([]);
+  const [avgPitchControl, setAvgPitchControl] = useState<number | null>(null);
 
   // Image Scan State
   const [isScanning, setIsScanning] = useState(false);
@@ -238,23 +239,27 @@ export const MatchPerformanceTracker: React.FC<MatchPerformanceTrackerProps> = (
       return;
     }
 
-    const historicalTactics = allTactics.filter(t => selectedVersions.includes(t.tacticName));
-
     navigator.vibrate?.(30);
     setIsAnalyzing(true);
     setAnalysisError('');
     setSuggestion(null);
+    setAvgPitchControl(null);
 
     try {
+      const allTacticNamesForAnalysis = [tactic.tacticName, ...selectedVersions];
+      const relevantMatches = matchHistory.filter(m => allTacticNamesForAnalysis.includes(m.tacticUsed));
+      if (relevantMatches.length > 0) {
+          const totalPitchControl = relevantMatches.reduce((sum, match) => sum + (match.pitchControl || 0), 0);
+          setAvgPitchControl(Math.round(totalPitchControl / relevantMatches.length));
+      }
+
+      const historicalTactics = allTactics.filter(t => selectedVersions.includes(t.tacticName));
       const result = await getTacticImprovementSuggestion(tactic, historicalTactics, matchHistory, analysisDetail);
       setSuggestion(result);
 
       // Auto-update knowledge base after successful analysis
-      const allTacticNamesForAnalysis = [tacticToAnalyze, ...selectedVersions];
-      const allMatchesForKnowledge = matchHistory.filter(m => allTacticNamesForAnalysis.includes(m.tacticUsed));
-
-      if (allMatchesForKnowledge.length >= 3) { // Only update if there's enough data
-        const newKnowledge = await synthesizeKnowledge(allMatchesForKnowledge);
+      if (relevantMatches.length >= 3) { // Only update if there's enough data
+        const newKnowledge = await synthesizeKnowledge(relevantMatches);
         onUpdateKnowledge(newKnowledge);
       }
     } catch (err) {
@@ -373,10 +378,6 @@ export const MatchPerformanceTracker: React.FC<MatchPerformanceTrackerProps> = (
                               <input type="number" name="possession" id="possession" value={newMatch.possession} onChange={handleChange} className="mt-1 block w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white" />
                           </div>
                           <div>
-                              <label htmlFor="pitchControl" className="block text-sm font-medium text-gray-300">Pitch Control %</label>
-                              <input type="number" name="pitchControl" id="pitchControl" value={newMatch.pitchControl ?? 50} onChange={handleChange} className="mt-1 block w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white" />
-                          </div>
-                           <div>
                               <label htmlFor="shots" className="block text-sm font-medium text-gray-300">Shots</label>
                               <input type="number" name="shots" id="shots" value={newMatch.shots} onChange={handleChange} className="mt-1 block w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white" />
                           </div>
@@ -520,7 +521,7 @@ export const MatchPerformanceTracker: React.FC<MatchPerformanceTrackerProps> = (
         </div>
       )}
 
-      {suggestion && tacticForAnalysis && <TacticImprovementModal suggestion={suggestion} originalTactic={tacticForAnalysis} onClose={() => setSuggestion(null)} onSaveNewVersion={onSaveNewVersion}/>}
+      {suggestion && tacticForAnalysis && <TacticImprovementModal suggestion={suggestion} originalTactic={tacticForAnalysis} onClose={() => setSuggestion(null)} onSaveNewVersion={onSaveNewVersion} avgPitchControl={avgPitchControl} />}
       {viewingImages && (<div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => { setViewingImages(null); navigator.vibrate?.(20); }}><div className="bg-gray-900 p-4 rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh]" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold text-white mb-4">Match Screenshots ({viewingImages.length})</h3><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto max-h-[calc(90vh-80px)]">{viewingImages.map((image, index) => (<img key={index} src={image} alt={`Match Screenshot ${index + 1}`} className="w-full h-auto object-contain rounded-md"/>))}</div></div></div>)}
       {scannedMatches && (<div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => { setScannedMatches(null); navigator.vibrate?.(20); }}><div className="bg-gray-800 p-6 rounded-lg shadow-xl max-w-lg w-full" onClick={e => e.stopPropagation()}><h3 className="text-xl font-bold text-white mb-3">Confirm Scanned Matches</h3><p className="text-gray-400 mb-4">The AI found {scannedMatches.length} matches. Please select the tactic used for these games and confirm to import.</p><div className="mb-4"><label htmlFor="bulkImportTactic" className="block text-sm font-medium text-gray-300 mb-1">Tactic Used</label><select id="bulkImportTactic" value={bulkImportTactic} onChange={e => setBulkImportTactic(e.target.value)} className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white">{allTactics.map(t => <option key={t.tacticName} value={t.tacticName}>{t.tacticName}</option>)}</select></div><div className="max-h-60 overflow-y-auto bg-gray-900/50 p-2 rounded-md mb-4"><table className="w-full text-sm text-left"><thead className="text-xs text-gray-400 uppercase"><tr><th className="px-4 py-2">Opponent</th><th className="px-4 py-2">Score</th></tr></thead><tbody className="text-white">{scannedMatches.map((match, index) => (<tr key={index} className="border-b border-gray-700"><td className="px-4 py-2">{match.opponent}</td><td className="px-4 py-2">{match.score}</td></tr>))}</tbody></table></div><div className="flex justify-end gap-x-3"><button onClick={() => { setScannedMatches(null); navigator.vibrate?.(20); }} className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md">Cancel</button><button onClick={handleConfirmBulkImport} className="bg-[var(--color-accent-600)] hover:bg-[var(--color-accent-700)] text-white font-bold py-2 px-4 rounded-md">Import {scannedMatches.length} Matches</button></div></div></div>)}
     </div>

@@ -1,4 +1,3 @@
-
 import React from 'react';
 import type { TacticImprovementSuggestion, DetailedTactic } from '../types';
 
@@ -7,6 +6,7 @@ interface TacticImprovementModalProps {
   originalTactic: DetailedTactic;
   onClose: () => void;
   onSaveNewVersion: (originalTactic: DetailedTactic, suggestion: TacticImprovementSuggestion) => void;
+  avgPitchControl: number | null;
 }
 
 const ChangeItem: React.FC<{ title: string, change?: string }> = ({ title, change }) => {
@@ -20,7 +20,7 @@ const ChangeItem: React.FC<{ title: string, change?: string }> = ({ title, chang
 };
 
 
-export const TacticImprovementModal: React.FC<TacticImprovementModalProps> = ({ suggestion, originalTactic, onClose, onSaveNewVersion }) => {
+export const TacticImprovementModal: React.FC<TacticImprovementModalProps> = ({ suggestion, originalTactic, onClose, onSaveNewVersion, avgPitchControl }) => {
   const handleApplyAndSave = () => {
     onSaveNewVersion(originalTactic, suggestion);
     onClose();
@@ -35,6 +35,14 @@ export const TacticImprovementModal: React.FC<TacticImprovementModalProps> = ({ 
         </div>
         
         <p className="text-gray-300 mb-4">Based on your match history for <strong className="text-white">{originalTactic.tacticName}</strong>, here are the AI's recommendations:</p>
+
+        {avgPitchControl !== null && (
+            <div className="bg-gray-900/50 p-4 rounded-lg mb-4 text-center border border-[var(--color-accent-500)]/30">
+                <h3 className="text-lg font-semibold text-gray-300 uppercase tracking-wider">Average Pitch Control</h3>
+                <p className="text-6xl font-bold text-[var(--color-text-accent)] my-2">{avgPitchControl}</p>
+                <p className="text-sm text-gray-400">This score represents your tactic's overall dominance. The AI's goal is to improve this number.</p>
+            </div>
+        )}
 
         <div className="space-y-4">
             <div className="bg-gray-700 p-4 rounded-lg">

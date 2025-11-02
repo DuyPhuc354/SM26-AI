@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import type { DetailedTactic } from '../types';
 import { AccordionItem } from './Accordion';
@@ -323,7 +324,7 @@ export const TacticsLibrary: React.FC<{
 
   // 2. Group the filtered tactics by base name
   // FIX: Explicitly typed the accumulator for the reduce method to ensure correct type inference for the accumulator and resolve downstream errors.
-  const groupedTactics = filteredTactics.reduce((acc: Record<string, DetailedTactic[]>, tactic) => {
+  const groupedTactics = filteredTactics.reduce<Record<string, DetailedTactic[]>>((acc, tactic) => {
       const baseName = tactic.tacticName.replace(/\s+v\d+(\.\d+)?$/, '').trim();
       if (!acc[baseName]) {
           acc[baseName] = [];

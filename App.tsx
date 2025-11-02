@@ -20,6 +20,42 @@ import { guideContent, communityTactics, tips } from './constants';
 import { synthesizeKnowledge } from './services/geminiService';
 import type { DetailedTactic, MatchData, Badge, TacticImprovementSuggestion } from './types';
 
+const calculatePitchControl = (match: Partial<Omit<MatchData, 'id' | 'matchNumber'>>): number => {
+    const { score, possession, shots, shotsOnTarget } = match;
+
+    if (!score || possession === undefined || shots === undefined || shotsOnTarget === undefined) {
+        return Math.round((possession || 0) * 0.4); // Fallback if data is incomplete
+    }
+    
+    const scoreParts = score.split('-').map(Number);
+    if (scoreParts.length !== 2 || isNaN(scoreParts[0]) || isNaN(scoreParts[1])) {
+        return Math.round(possession * 0.4); // Fallback to possession only
+    }
+
+    const [myScore, opponentScore] = scoreParts;
+    const goalDifference = myScore - opponentScore;
+
+    const possessionWeight = 0.4;
+    const shootingPressureWeight = 0.4;
+    const dominanceWeight = 0.2;
+
+    const possessionScore = possession;
+    
+    // Total threat points: SOT are worth more than other shots. Max threat around 30.
+    const shootingPressureScore = Math.min(100, ((shotsOnTarget + shots) / 30) * 100);
+
+    // Capped Goal Difference from -4 to +4, mapped to a 0-100 scale.
+    const cappedGD = Math.max(-4, Math.min(4, goalDifference));
+    const dominanceScore = ((cappedGD + 4) / 8) * 100;
+
+    const pitchControl = 
+        possessionScore * possessionWeight +
+        shootingPressureScore * shootingPressureWeight +
+        dominanceScore * dominanceWeight;
+
+    return Math.round(pitchControl);
+};
+
 const APP_UPDATE_VERSION = 'v1.2'; // Increment to show update modal again
 
 type Tab = 'dashboard' | 'tactics' | 'tools';
@@ -43,7 +79,20 @@ const App: React.FC = () => {
       }
       const storedHistory = localStorage.getItem('sm26_match_history');
       if (storedHistory) {
-        setMatchHistory(JSON.parse(storedHistory));
+        let history: MatchData[] = JSON.parse(storedHistory);
+        let wasUpdated = false;
+        // Migration to calculate pitchControl for old entries
+        history = history.map(match => {
+            if (match.pitchControl === undefined) {
+                 wasUpdated = true;
+                 return { ...match, pitchControl: calculatePitchControl(match) };
+            }
+            return match;
+        });
+        setMatchHistory(history);
+        if (wasUpdated) {
+            localStorage.setItem('sm26_match_history', JSON.stringify(history));
+        }
       }
       const storedKnowledge = localStorage.getItem('sm26_ai_knowledge');
       if (storedKnowledge) {
@@ -115,6 +164,7 @@ const App: React.FC = () => {
     const maxMatchNumber = matchHistory.length > 0 ? Math.max(...matchHistory.map(m => m.matchNumber)) : 0;
     const newMatches: MatchData[] = importedMatches.map((match, index) => ({
         ...match,
+        pitchControl: match.pitchControl ?? calculatePitchControl(match), // Calculate if missing
         id: new Date().toISOString() + Math.random() + index,
         matchNumber: maxMatchNumber + 1 + index,
     }));
@@ -146,6 +196,7 @@ const App: React.FC = () => {
   const handleAddMatch = (match: Omit<MatchData, 'id' | 'matchNumber'>) => {
     const newMatch: MatchData = {
         ...match,
+        pitchControl: calculatePitchControl(match),
         id: new Date().toISOString() + Math.random(),
         matchNumber: matchHistory.length > 0 ? Math.max(...matchHistory.map(m => m.matchNumber)) + 1 : 1,
     };
@@ -159,6 +210,7 @@ const App: React.FC = () => {
     const maxMatchNumber = matchHistory.length > 0 ? Math.max(...matchHistory.map(m => m.matchNumber)) : 0;
     const newMatches: MatchData[] = matchesToAdd.map((match, index) => ({
         ...match,
+        pitchControl: calculatePitchControl(match),
         id: new Date().toISOString() + Math.random() + index,
         matchNumber: maxMatchNumber + 1 + index,
     }));

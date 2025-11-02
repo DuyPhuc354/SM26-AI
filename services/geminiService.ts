@@ -142,7 +142,7 @@ ${historyPrompt}
 
 INSTRUCTIONS:
 Based on the Soccer Manager 2026 CONTEXT, the AI'S PREVIOUSLY LEARNED KNOWLEDGE (if provided), the user's SQUAD COMPOSITION, their TEAM PLAYSTYLE, and their MATCH HISTORY (if provided):
-1.  **Analyze All Context:** Use all available information, especially the learned knowledge and match history, to understand past successes and failures. Your suggestion should be an improvement based on this data.
+1.  **Analyze All Context:** Use all available information, especially the learned knowledge and match history, to understand past successes and failures. Your suggestion should be an improvement based on this data. Use the "Pitch Control" score in the match history as a key indicator of a tactic's success.
 2.  **Strict Formation and Positions:** Devise a logical and balanced formation that uses EXACTLY the number of players for the EXACT positions specified by the user. Do NOT substitute positions. For example, if the user specifies 1 player for 'DML', the formation MUST include a 'DML' and not a 'DL'. If the user provides 3 for 'DC', the formation MUST use 3 central defenders.
 3.  **Assign Roles:** For each position from the user's input, provide a valid role from the CONTEXT. Provide a role for ALL 11 PLAYER POSITIONS (add a Goalkeeper automatically). The returned playerRoles array must contain exactly 11 players, and the positions must match the user's SQUAD COMPOSITION plus a GK.
 4.  **Set Instructions:** Provide a complete set of General, Attack, and Defence instructions that are tactically sound for the generated formation and playstyle.
@@ -304,7 +304,7 @@ export const getPlayerRoleSuggestion = async (playerDescription: string, positio
 const improvementSchema = {
     type: Type.OBJECT,
     properties: {
-      analysis: { type: Type.STRING, description: "A summary of the team's performance based on match history, identifying key weaknesses revealed by the data." },
+      analysis: { type: Type.STRING, description: "A summary of the team's performance based on match history, identifying key weaknesses revealed by the data. Focus on why the Pitch Control score is what it is." },
       suggestedChanges: {
         type: Type.OBJECT,
         properties: {
@@ -314,7 +314,7 @@ const improvementSchema = {
           keyRoles: { type: Type.STRING, description: "Suggested change to ONE or TWO key player roles. e.g., 'Switch Box-to-box Midfielder to a Ball-Winning Midfielder.'" },
         },
       },
-      justification: { type: Type.STRING, description: "Detailed reasoning for why these specific changes will improve performance, directly referencing the performance analysis." },
+      justification: { type: Type.STRING, description: "Detailed reasoning for why these specific changes will improve performance and increase the average Pitch Control score, directly referencing the performance analysis." },
     },
     required: ["analysis", "suggestedChanges", "justification"],
 };
@@ -373,6 +373,7 @@ export const getTacticImprovementSuggestion = async (
     const prompt = `
     CONTEXT:
     You are an expert Soccer Manager 2026 tactical analyst. Your task is to analyze a tactic and its match results to provide concrete improvement suggestions.
+    A new key metric, "Pitch Control", has been introduced. It is calculated from possession, shots, and score, representing overall dominance. A higher score is better. Your primary goal is to suggest changes that will increase the team's average Pitch Control score.
     You MUST adhere strictly to the valid instructions and roles defined in the guide below. Do not invent new roles or instruction values.
 
     --- TACTICAL GUIDE ---
@@ -391,10 +392,11 @@ export const getTacticImprovementSuggestion = async (
     ${historySummary}
 
     INSTRUCTIONS:
-    1.  **Analyze Full History**: If a 'TACTIC EVOLUTION HISTORY' is provided, you MUST analyze the changes from one version to the next and how those changes impacted results. For example, did changing a 'Stopper' to a 'Ball-Playing Defender' lead to more goals conceded?
-    2.  **Analyze Latest Performance**: Based on the match data for the LATEST VERSION, identify its main weaknesses.
-    3.  **Suggest Evolutionary Changes**: Propose a few (1-4) specific, high-impact changes for the LATEST VERSION. These suggestions should represent the logical next step in the tactic's evolution, directly addressing the latest performance issues while respecting the historical context.
-    4.  **Justify Your Suggestions**: Explain *why* your proposed changes are the correct next step. Directly reference the performance of the latest version and explicitly state how the changes learn from the successes or failures of the transitions between previous versions (e.g., 'Moving back to 'Shoot on Sight' is recommended because the switch to 'Work ball into box' in v4, compared to v3, resulted in fewer shots without a significant increase in conversion rate.').
+    1.  **Primary Goal**: Your main objective is to suggest changes that will increase the "Pitch Control" score.
+    2.  **Analyze Full History**: If a 'TACTIC EVOLUTION HISTORY' is provided, you MUST analyze the changes from one version to the next and how those changes impacted results, especially the Pitch Control score.
+    3.  **Analyze Latest Performance**: Based on the match data for the LATEST VERSION, identify its main weaknesses, focusing on factors that lower the Pitch Control score (e.g., low possession, few shots, conceding goals).
+    4.  **Suggest Evolutionary Changes**: Propose a few (1-4) specific, high-impact changes for the LATEST VERSION. These suggestions should represent the logical next step in the tactic's evolution, directly addressing the latest performance issues while respecting the historical context.
+    5.  **Justify Your Suggestions**: Explain *why* your proposed changes are the correct next step to improve the Pitch Control score. Directly reference the performance of the latest version and explicitly state how the changes learn from the successes or failures of the transitions between previous versions.
     `;
 
     try {
@@ -616,7 +618,8 @@ Review the entire match history provided. Identify recurring patterns, successfu
 2.  Are there specific opponent types this team struggles against?
 3.  What player roles or instructions seem most effective based on the results?
 4.  What are the biggest vulnerabilities (e.g., conceding late goals, struggling to control the midfield despite high possession)?
-5.  Provide actionable insights that can inform future tactical decisions.
+5.  Pay special attention to "Pitch Control". Analyze which tactics lead to higher scores in this metric, as it's the primary measure of dominance.
+6.  Provide actionable insights that can inform future tactical decisions.
 
 The output should be a plain text summary, not JSON.
 `;
