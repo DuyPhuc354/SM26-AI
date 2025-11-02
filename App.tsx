@@ -434,6 +434,7 @@ const App: React.FC = () => {
                       onGenerate={handleGenerateKnowledge}
                       onImport={handleImportKnowledge}
                       onExport={handleExportKnowledge}
+                      onUpdateKnowledge={handleUpdateKnowledge}
                   />
               </div>
               <MatchPerformanceTracker

@@ -1,4 +1,3 @@
-
 import React, { useRef } from 'react';
 
 interface KnowledgeManagerProps {
@@ -7,9 +6,10 @@ interface KnowledgeManagerProps {
   onGenerate: () => void;
   onImport: (file: File) => void;
   onExport: () => void;
+  onUpdateKnowledge: (newKnowledge: string) => void;
 }
 
-export const KnowledgeManager: React.FC<KnowledgeManagerProps> = ({ knowledge, isGenerating, onGenerate, onImport, onExport }) => {
+export const KnowledgeManager: React.FC<KnowledgeManagerProps> = ({ knowledge, isGenerating, onGenerate, onImport, onExport, onUpdateKnowledge }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImportClick = () => {
@@ -69,9 +69,9 @@ export const KnowledgeManager: React.FC<KnowledgeManagerProps> = ({ knowledge, i
       </div>
 
       <textarea
-        readOnly
         value={knowledge}
-        placeholder="No knowledge generated yet. Log at least 5 matches and click 'Generate' to begin."
+        onChange={(e) => onUpdateKnowledge(e.target.value)}
+        placeholder="AI's learned knowledge will appear here. You can also edit it manually or generate it from match history."
         className="w-full h-48 p-3 bg-gray-900 border border-gray-600 rounded-md text-gray-300 placeholder-gray-500 font-mono text-sm"
         aria-label="AI Knowledge Base content"
       />

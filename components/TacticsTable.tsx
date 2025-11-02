@@ -323,15 +323,15 @@ export const TacticsLibrary: React.FC<{
   );
 
   // 2. Group the filtered tactics by base name
-  // FIX: Explicitly typed the accumulator for the reduce method to ensure correct type inference for the accumulator and resolve downstream errors.
-  const groupedTactics = filteredTactics.reduce<Record<string, DetailedTactic[]>>((acc, tactic) => {
+  // FIX: The original `reduce` call was causing type inference issues. By casting the initial value `{}`, we ensure `groupedTactics` is correctly typed, which resolves all related downstream errors.
+  const groupedTactics = filteredTactics.reduce((acc, tactic) => {
       const baseName = tactic.tacticName.replace(/\s+v\d+(\.\d+)?$/, '').trim();
       if (!acc[baseName]) {
           acc[baseName] = [];
       }
       acc[baseName].push(tactic);
       return acc;
-  }, {});
+  }, {} as Record<string, DetailedTactic[]>);
 
   // 3. Create an array of groups and sort them (favorites first, then alphabetically)
   const sortedGroupEntries = Object.entries(groupedTactics).sort(([baseNameA, tacticsA], [baseNameB, tacticsB]) => {
