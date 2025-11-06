@@ -210,6 +210,24 @@ export const communityTactics: DetailedTactic[] = [
       attackInstructions: "Passing: Direct; Attacking: Down Both Flanks; Forwards: Shoot on sight; Wide Play: Play early crosses; Build up: Fast; Counter Attack: Yes",
       defenceInstructions: "Pressing: Own Half; Tackling: Hard; Back Line: Low; Sweeper Keeper: No; Time Wasting: Normal",
       bestForTips: "Hoàn hảo cho các đội yếu hơn khi đối đầu với đối thủ mạnh. Hấp thụ áp lực và tung ra các đòn phản công nhanh bằng các cầu thủ chạy cánh tốc độ."
+    },
+    {
+      tacticName: "High-Pressure 4-3-3 v2",
+      formation: "4-3-3",
+      keyRoles: "GK: Keeper; DML: Fullback; DC: Stopper; DC: Ball-playing defender; DMR: Fullback; DMC: Deep-lying playmaker; MC: General Midfielder; MC: Box-to-box Midfielder; AML: Wide Forward; FC: Target Man; AMR: Advanced Playmaker",
+      generalInstructions: "Width: Narrow; Mentality: Attacking; Tempo: Fast; Fluidity: Normal; Work Rate: Fast; Creativity: Balanced",
+      attackInstructions: "Passing Style: Mixed; Attacking Style: Mixed; Forwards: Shoot on sight; Wide Play: Work ball into box; Build Up: Normal; Counter Attack: No",
+      defenceInstructions: "Pressing: All Over; Tackling Style: Aggressive; Back Line: High; Sweeper Keeper: No; Time Wasting: Normal",
+      bestForTips: "Một biến thể 4-3-3 cân bằng, kết hợp pressing toàn sân và kiểm soát tuyến giữa. Lý tưởng để áp đặt lối chơi và bóp nghẹt đối thủ bằng áp lực cao.",
+    },
+    {
+      tacticName: "High-Pressure 4-3-3 v3",
+      formation: "4-3-3",
+      keyRoles: "GK: Keeper; DML: Fullback; DC: Stopper; DC: Ball-Playing Defender; DMR: Fullback; DMC: Deep-lying Playmaker; MC: Box-to-box Midfielder; MC: General Midfielder; AML: Wide Forward; AMR: Wide Forward; ST: Target Man",
+      generalInstructions: "Width: Normal; Mentality: Attacking; Tempo: Fast; Fluidity: Normal; Work Rate: Fast; Creativity: Balanced",
+      attackInstructions: "Passing Style: Mixed; Attacking Style: Mixed; Forwards: Shoot on sight; Wide Play: Byline crosses; Build Up: Normal; Counter Attack: No",
+      defenceInstructions: "Pressing: All Over; Tackling Style: Aggressive; Back Line: High; Sweeper Keeper: Yes; Time Wasting: Normal",
+      bestForTips: "This tactic is designed as a high-pressure, attacking 4-3-3, leveraging the SM26 meta principles for dominance. The squad composition naturally fits a 4-3-3 setup with DML/DMR acting as wide defenders, a DMC, two MCs, and AML/AMR as wide attackers supporting a central striker.\n\n**Formation & General Instructions:** The 4-3-3 is a meta-defining formation that allows for attacking overloads. An 'Attacking' mentality with 'Fast' tempo and 'Fast' work rate aligns directly with the SM26 meta of fast-paced, high-pressure football. 'Normal' width balances defensive solidity with attacking spread, while 'Bold' creativity encourages direct and incisive play.\n\n**Player Roles:**\n*   **Defence:** The 'Stopper' and 'Ball-Playing Defender' partnership in central defence provides both aggressive tackling and intelligent distribution, a key synergy for modern defence. The 'Wingback' at DML offers attacking thrust on one flank, while the 'Fullback' at DMR provides more defensive balance, mirroring the asymmetrical fullback approach seen in exemplary tactics.\n*   **Midfield:** A 'Deep-lying Playmaker' at DMC dictates play from deep, crucial for controlling the game, as highlighted in the 'High-Pressure 4-3-3' example. The two MCs, a 'Box-to-box Midfielder' and a 'Playmaker', create a balanced midfield engine, combining high work rate and defensive cover with creative output, a core synergy.\n*   **Attack:** The 'Advanced Playmaker' at AML is chosen to cut inside and become a significant goal threat, a powerful meta strategy. The 'Winger' at AMR provides traditional width and crossing opportunities. The 'Finisher' at ST is the ideal role to convert chances, aligning with the aggressive 'Shoot on sight' instruction.\n\n**Attack Instructions:** 'Mixed' passing allows for flexibility, combining quick transitions with more controlled build-up. 'Down Both Flanks' attacking style maximizes the involvement of the DML/DMR and AML/AMR. 'Shoot on sight' and 'Byline crosses' encourage aggressive attacking play to create high shot volume. 'Fast' build-up and enabling 'Counter Attack' ensure rapid transitions, a hallmark of SM26 meta.\n\n**Defence Instructions:** 'All Over' pressing, 'Aggressive' tackling, and a 'High' back line are direct applications of the dominant philosophy to suffocate opponents and win the ball back quickly. A 'Modern Keeper' with 'Sweeper Keeper' enabled complements the high defensive line, and 'Low' time wasting maintains the fast tempo throughout the match.",
     }
 ];
 

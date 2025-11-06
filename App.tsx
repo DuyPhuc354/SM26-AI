@@ -8,7 +8,7 @@ import { TacticImporter } from './components/TacticImporter';
 import { MatchHistoryImporter } from './components/MatchHistoryImporter';
 import { MatchPerformanceTracker } from './components/MatchPerformanceTracker';
 import { FormationPlanner } from './components/FormationPlanner';
-import { MatchPredictor } from './components/MatchPredictor';
+import { TacticOptimizer } from './components/TacticOptimizer';
 import { Badges } from './components/Badges';
 import { UpdateNotification } from './components/UpdateNotification';
 import { PlayerRoleFinder } from './components/PlayerRoleFinder';
@@ -16,47 +16,149 @@ import { KnowledgeManager } from './components/KnowledgeManager';
 import { ChatBot } from './components/ChatBot';
 import { ImageAnalyzer } from './components/ImageAnalyzer';
 import { AudioTranscriber } from './components/AudioTranscriber';
+import { TacticImprovementModal } from './components/TacticImprovementModal';
 import { guideContent, communityTactics, tips } from './constants';
-import { synthesizeKnowledge } from './services/geminiService';
+import { getTacticImprovementSuggestion, synthesizeKnowledge } from './services/geminiService';
 import type { DetailedTactic, MatchData, Badge, TacticImprovementSuggestion } from './types';
 
-const calculatePitchControl = (match: Partial<Omit<MatchData, 'id' | 'matchNumber'>>): number => {
-    const { score, possession, shots, shotsOnTarget } = match;
-
-    if (!score || possession === undefined || shots === undefined || shotsOnTarget === undefined) {
-        return Math.round((possession || 0) * 0.4); // Fallback if data is incomplete
-    }
-    
-    const scoreParts = score.split('-').map(Number);
-    if (scoreParts.length !== 2 || isNaN(scoreParts[0]) || isNaN(scoreParts[1])) {
-        return Math.round(possession * 0.4); // Fallback to possession only
-    }
-
-    const [myScore, opponentScore] = scoreParts;
-    const goalDifference = myScore - opponentScore;
-
-    const possessionWeight = 0.4;
-    const shootingPressureWeight = 0.4;
-    const dominanceWeight = 0.2;
-
-    const possessionScore = possession;
-    
-    // Total threat points: SOT are worth more than other shots. Max threat around 30.
-    const shootingPressureScore = Math.min(100, ((shotsOnTarget + shots) / 30) * 100);
-
-    // Capped Goal Difference from -4 to +4, mapped to a 0-100 scale.
-    const cappedGD = Math.max(-4, Math.min(4, goalDifference));
-    const dominanceScore = ((cappedGD + 4) / 8) * 100;
-
-    const pitchControl = 
-        possessionScore * possessionWeight +
-        shootingPressureScore * shootingPressureWeight +
-        dominanceScore * dominanceWeight;
-
-    return Math.round(pitchControl);
+// Helper for normalized difference, mirroring the Python `delta_ratio`
+const deltaRatio = (a: number | undefined, b: number | undefined): number => {
+    const valA = a ?? 0;
+    const valB = b ?? 0;
+    if (valA + valB === 0) return 0.0;
+    return (valA - valB) / (valA + valB);
 };
 
-const APP_UPDATE_VERSION = 'v1.2'; // Increment to show update modal again
+// New PCI calculation based on user's Python code
+const calculatePitchControl = (match: Partial<Omit<MatchData, 'id' | 'matchNumber'>>): number => {
+    // --- New weights and scales from user's python code ---
+    const wP = 0.25;
+    const wS = 0.20;
+    const wT = 0.20;
+    const wG = 0.25;
+    const wG_extra = 0.10;
+    const w_pen = 0.05;
+    const w_pen_extra = 0.15;
+
+    const score_scale = 2.0;
+    const boost_scale = 1.0;
+    const penalty_boost_scale = 1.0;
+    const penalty_gen_scale = 2.0;
+    
+    const res_win = 0.08;
+    const res_draw = 0.02;
+    const res_loss = -0.08;
+
+    const {
+        score,
+        possession,
+        shots,
+        shotsOnTarget,
+        opponentPossession,
+        opponentShots,
+        opponentShotsOnTarget
+    } = match;
+
+    // 1. Parse score to get GF (goalsFor) and GA (goalsAgainst)
+    let goalsFor = 0;
+    let goalsAgainst = 0;
+    if (score) {
+        const scoreParts = score.split('-').map(Number);
+        if (scoreParts.length === 2 && !isNaN(scoreParts[0]) && !isNaN(scoreParts[1])) {
+            goalsFor = scoreParts[0];
+            goalsAgainst = scoreParts[1];
+        }
+    }
+
+    // 2. Prepare stat pairs with fallbacks
+    const pos_own = possession ?? 50;
+    const pos_opp = opponentPossession ?? (100 - pos_own);
+    const shots_own = shots ?? 0;
+    const shots_opp = opponentShots ?? 0;
+    const sot_own = shotsOnTarget ?? 0;
+    const sot_opp = opponentShotsOnTarget ?? 0;
+
+    // 3. Calculate deltas
+    const dP = deltaRatio(pos_own, pos_opp);
+    const dS = deltaRatio(shots_own, shots_opp);
+    const dT = deltaRatio(sot_own, sot_opp);
+
+    // 4. New calculations based on user's formula
+    const raw_g = goalsFor - goalsAgainst;
+    // base goal advantage bounded
+    const dG_base = Math.tanh(raw_g / score_scale);
+    
+    // extra boost if GF >= 3 (activation at GF>2)
+    const boost = Math.tanh(Math.max(0, goalsFor - 2) / boost_scale);
+
+    // extra penalty if GA >= 3
+    const pen_extra = Math.tanh(Math.max(0, goalsAgainst - 2) / penalty_boost_scale);
+    
+    // general penalty from any goals conceded (smooth)
+    const pen_gen = Math.tanh(goalsAgainst / penalty_gen_scale);
+
+    // result term
+    let res = 0;
+    if (goalsFor > goalsAgainst) {
+        res = res_win;
+    } else if (goalsFor === goalsAgainst) {
+        res = res_draw;
+    } else {
+        res = res_loss;
+    }
+
+    // 5. Calculate weighted sum
+    const base = wP * dP + wS * dS + wT * dT + wG * dG_base;
+    const total = base + wG_extra * boost - w_pen * pen_gen - w_pen_extra * pen_extra + res;
+
+    // 6. Final PCI calculation
+    const pci = 50 * (1 + total);
+
+    // Clamp the result between 0 and 100 for safety and return as an integer
+    return Math.round(Math.max(0, Math.min(100, pci)));
+};
+
+
+// A more robust helper function to merge instruction strings.
+const mergeInstructionStrings = (original: string, changes: string | undefined): string => {
+  if (!changes || changes.trim() === '') {
+    return original;
+  }
+
+  const instructionToMap = (str: string): Map<string, string> => {
+    const map = new Map<string, string>();
+    if (!str) return map;
+
+    str.split(';').forEach(part => {
+      const trimmedPart = part.trim();
+      if (trimmedPart) {
+        const separatorIndex = trimmedPart.indexOf(':');
+        if (separatorIndex > 0) { // Key cannot be empty
+          const key = trimmedPart.substring(0, separatorIndex).trim();
+          const value = trimmedPart.substring(separatorIndex + 1).trim();
+          if (key && value) {
+            map.set(key, value);
+          }
+        }
+      }
+    });
+    return map;
+  };
+
+  const originalMap = instructionToMap(original);
+  const changesMap = instructionToMap(changes);
+
+  changesMap.forEach((value, key) => {
+    originalMap.set(key, value);
+  });
+
+  return Array.from(originalMap.entries())
+    .map(([key, value]) => `${key}: ${value}`)
+    .join('; ');
+};
+
+
+const APP_UPDATE_VERSION = 'v1.3'; // Increment to show update modal again
 
 type Tab = 'dashboard' | 'tactics' | 'tools';
 
@@ -70,6 +172,13 @@ const App: React.FC = () => {
   const [aiKnowledge, setAiKnowledge] = useState<string>('');
   const [isGeneratingKnowledge, setIsGeneratingKnowledge] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  
+  // State for Tactic Improvement Modal
+  const [tacticToImprove, setTacticToImprove] = useState<DetailedTactic | null>(null);
+  const [improvementSuggestion, setImprovementSuggestion] = useState<TacticImprovementSuggestion | null>(null);
+  const [isAnalyzingSuggestion, setIsAnalyzingSuggestion] = useState(false);
+  const [analysisSuggestionError, setAnalysisSuggestionError] = useState('');
+
 
   useEffect(() => {
     try {
@@ -83,9 +192,11 @@ const App: React.FC = () => {
         let wasUpdated = false;
         // Migration to calculate pitchControl for old entries
         history = history.map(match => {
-            if (match.pitchControl === undefined) {
+            const oldPitchControl = match.pitchControl;
+            const newPitchControl = calculatePitchControl(match);
+            if (oldPitchControl !== newPitchControl) {
                  wasUpdated = true;
-                 return { ...match, pitchControl: calculatePitchControl(match) };
+                 return { ...match, pitchControl: newPitchControl };
             }
             return match;
         });
@@ -291,101 +402,66 @@ const App: React.FC = () => {
     reader.readAsText(file);
   };
 
-  const handleSaveTacticVersion = (originalTactic: DetailedTactic, suggestion: TacticImprovementSuggestion) => {
-    triggerVibration();
-
-    const applyTacticChanges = (tactic: DetailedTactic, changes: TacticImprovementSuggestion): DetailedTactic => {
-        const newTactic = JSON.parse(JSON.stringify(tactic));
-        const { general, attack, defence, keyRoles } = changes.suggestedChanges;
-
-        const instructionChangeRegex = /change the '([\w\s]+)' instruction from '(.+?)' to '(.+?)\.'/i;
-        
-        const applyInstructionChange = (instructionString: string, change: string | undefined): string => {
-            if (!change) return instructionString;
-            
-            const match = change.match(instructionChangeRegex);
-            if (!match) return instructionString;
-            
-            const [, rawInstructionName, rawOldValue, rawNewValue] = match;
-            const instructionName = rawInstructionName.trim();
-            const newValue = rawNewValue.trim();
-
-            const instructions: Record<string, string> = {};
-            const originalKeys: string[] = [];
-            instructionString.split(';').forEach(part => {
-                const separatorIndex = part.indexOf(':');
-                if (separatorIndex > -1) {
-                    const key = part.substring(0, separatorIndex).trim();
-                    const value = part.substring(separatorIndex + 1).trim();
-                    if (key) {
-                        instructions[key] = value;
-                        originalKeys.push(key);
-                    }
-                }
-            });
-            
-            // This is a simplified search; a more robust version might normalize keys
-            const keyToUpdate = Object.keys(instructions).find(k => k.toLowerCase().replace(/\s/g, '') === instructionName.toLowerCase().replace(/\s/g, ''));
-
-            if (keyToUpdate) {
-                instructions[keyToUpdate] = newValue;
-            } else {
-                console.warn(`Could not find instruction key for "${instructionName}" in "${instructionString}"`);
-                return instructionString;
-            }
-
-            return originalKeys.map(key => `${key}: ${instructions[key]}`).join('; ');
-        };
-
-        newTactic.generalInstructions = applyInstructionChange(newTactic.generalInstructions, general);
-        newTactic.attackInstructions = applyInstructionChange(newTactic.attackInstructions, attack);
-        newTactic.defenceInstructions = applyInstructionChange(newTactic.defenceInstructions, defence);
-
-        const roleChangeRegex = /switch\s+([\w\s-]+)\s+to\s+a?\s*([\w\s-]+)/i;
-        if (keyRoles) {
-            const match = keyRoles.match(roleChangeRegex);
-            if (match) {
-                const [, rawOldRole, rawNewRole] = match;
-                const oldRole = rawOldRole.trim().replace(/[.,]$/, '');
-                const newRole = rawNewRole.trim().replace(/[.,]$/, '');
-                
-                let isReplaced = false;
-
-                if (newTactic.keyRoles.includes(oldRole)) {
-                    newTactic.keyRoles = newTactic.keyRoles.replace(oldRole, newRole);
-                    isReplaced = true;
-                } else {
-                    const oldRoleShort = oldRole.replace(/\s+(?:midfielder|defender|forward|keeper|striker)$/i, '').trim();
-                    if (oldRoleShort !== oldRole && newTactic.keyRoles.includes(oldRoleShort)) {
-                        newTactic.keyRoles = newTactic.keyRoles.replace(oldRoleShort, newRole);
-                        isReplaced = true;
-                    }
-                }
-
-                if (!isReplaced) {
-                     console.warn(`Could not apply role change for "${oldRole}"`);
-                }
-            }
+  const handleRateTactic = (tacticName: string, rating: number) => {
+    const updatedTactics = savedTactics.map(t => {
+        if (t.tacticName === tacticName) {
+            const newRatings = [...(t.ratings || []), rating];
+            return { ...t, ratings: newRatings };
         }
-        return newTactic;
-    };
-
-    const modifiedTactic = applyTacticChanges(originalTactic, suggestion);
-
-    const baseName = originalTactic.tacticName.replace(/\s+v\d+(\.\d+)?$/, '');
-    let version = 2;
-    let newName = `${baseName} v${version}`;
-
-    const existingNames = savedTactics.map(t => t.tacticName);
-    while (existingNames.includes(newName)) {
-        version++;
-        newName = `${baseName} v${version}`;
-    }
-
-    modifiedTactic.tacticName = newName;
-    handleSaveTactic(modifiedTactic);
+        return t;
+    });
+    setSavedTactics(updatedTactics);
+    localStorage.setItem('sm26_saved_tactics', JSON.stringify(updatedTactics));
+    triggerVibration();
   };
-  
+
+  const handleRequestImprovement = async (tactic: DetailedTactic) => {
+      navigator.vibrate?.(30);
+      setIsAnalyzingSuggestion(true);
+      setTacticToImprove(tactic);
+      setAnalysisSuggestionError('');
+      setImprovementSuggestion(null);
+
+      try {
+          const suggestion = await getTacticImprovementSuggestion(tactic, matchHistory);
+          setImprovementSuggestion(suggestion);
+      } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : "An unknown error occurred during analysis.";
+          setAnalysisSuggestionError(errorMessage);
+      } finally {
+          setIsAnalyzingSuggestion(false);
+      }
+  };
+
+  const handleSaveImprovedTactic = (originalTactic: DetailedTactic, suggestion: TacticImprovementSuggestion) => {
+      const newTactic = JSON.parse(JSON.stringify(originalTactic));
+
+      newTactic.generalInstructions = mergeInstructionStrings(newTactic.generalInstructions, suggestion.suggestedChanges.general);
+      newTactic.attackInstructions = mergeInstructionStrings(newTactic.attackInstructions, suggestion.suggestedChanges.attack);
+      newTactic.defenceInstructions = mergeInstructionStrings(newTactic.defenceInstructions, suggestion.suggestedChanges.defence);
+      newTactic.keyRoles = mergeInstructionStrings(newTactic.keyRoles, suggestion.suggestedChanges.keyRoles);
+      
+      const baseName = originalTactic.tacticName.replace(/\s+v\d+(\.\d+)?$/, '').trim();
+      let version = 2;
+      let newName = `${baseName} v${version}`;
+      const existingNames = savedTactics.map(t => t.tacticName);
+
+      while (existingNames.includes(newName)) {
+          version++;
+          newName = `${baseName} v${version}`;
+      }
+      
+      newTactic.tacticName = newName;
+      newTactic.isFavorite = false;
+      newTactic.ratings = []; // Reset ratings for new version
+      newTactic.bestForTips = `Improved based on AI analysis. Original Analysis:\n${suggestion.analysis}\n\nJustification for changes:\n${suggestion.justification}`;
+
+      const updatedTactics = [...savedTactics, newTactic];
+      setSavedTactics(updatedTactics);
+      localStorage.setItem('sm26_saved_tactics', JSON.stringify(updatedTactics));
+      triggerVibration();
+  };
+
   const allTactics = [...communityTactics, ...savedTactics];
 
   const allBadges: Badge[] = [
@@ -448,8 +524,8 @@ const App: React.FC = () => {
                   setIsHistoryImporterOpen(true);
                   navigator.vibrate?.(20);
                 }}
-                onSaveNewVersion={handleSaveTacticVersion}
                 onUpdateKnowledge={handleUpdateKnowledge}
+                onRequestImprovement={handleRequestImprovement}
               />
           </div>
         </div>
@@ -464,6 +540,10 @@ const App: React.FC = () => {
               setIsImporterOpen(true);
               navigator.vibrate?.(20);
             }}
+            matchHistory={matchHistory}
+            onSaveTactic={handleSaveTactic}
+            onRateTactic={handleRateTactic}
+            onImproveTactic={handleRequestImprovement}
           />
         </div>
 
@@ -476,7 +556,7 @@ const App: React.FC = () => {
                 <AudioTranscriber />
               </div>
               <div className="space-y-8">
-                <MatchPredictor />
+                <TacticOptimizer matchHistory={matchHistory} onSaveTactic={handleSaveTactic} />
                 <Badges allBadges={allBadges} />
                 <TipsSection tips={tips} />
                 <div className="bg-gray-800 rounded-lg shadow-lg p-6">
@@ -536,6 +616,21 @@ const App: React.FC = () => {
         />
       )}
       {isUpdateModalOpen && <UpdateNotification onClose={handleCloseUpdateModal} />}
+       {tacticToImprove && (
+        <TacticImprovementModal
+            originalTactic={tacticToImprove}
+            suggestion={improvementSuggestion}
+            isLoading={isAnalyzingSuggestion}
+            error={analysisSuggestionError}
+            onClose={() => setTacticToImprove(null)}
+            onSaveNewVersion={handleSaveImprovedTactic}
+            avgPitchControl={(() => {
+                const matches = matchHistory.filter(m => m.tacticUsed === tacticToImprove.tacticName);
+                if (matches.length === 0) return null;
+                return Math.round(matches.reduce((sum, m) => sum + (m.pitchControl ?? 50), 0) / matches.length);
+            })()}
+        />
+      )}
     </div>
   );
 };

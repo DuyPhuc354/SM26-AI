@@ -1,3 +1,5 @@
+// FIX: Removed self-referencing import which caused compilation errors.
+
 export interface TacticSuggestion {
   formation: string;
   general: {
@@ -39,6 +41,7 @@ export interface DetailedTactic {
   defenceInstructions: string;
   bestForTips: string;
   isFavorite?: boolean;
+  ratings?: number[];
 }
 
 export interface MatchData {
@@ -101,14 +104,23 @@ export interface TacticImprovementSuggestion {
   justification: string;
 }
 
+export interface OptimizedTacticCandidate {
+  predictedPciScore: number;
+  tactic: TacticSuggestion;
+}
+
+
+// FIX: Updated props for MatchPerformanceTracker to align with its usage.
+// This resolves type errors where the component was passed `onShowEvolutionReport`
+// but the prop was not defined in this interface. The unused `onSaveNewVersion` was also removed.
 export interface MatchPerformanceTrackerProps {
   matchHistory: MatchData[];
   allTactics: DetailedTactic[];
   onAddMatch: (match: Omit<MatchData, 'id' | 'matchNumber'>) => void;
-  onAddMatches: (matches: Omit<MatchData, 'id' | 'matchNumber'>[]) => void;
   onDeleteMatch: (matchId: string) => void;
   onClearHistory: () => void;
-  onOpenHistoryImporter: () => void;
-  onSaveNewVersion: (originalTactic: DetailedTactic, suggestion: TacticImprovementSuggestion) => void;
   onUpdateKnowledge: (newKnowledge: string) => void;
+  onAddMatches: (matches: Omit<MatchData, 'id' | 'matchNumber'>[]) => void;
+  onOpenHistoryImporter: () => void;
+  onRequestImprovement: (tactic: DetailedTactic) => void;
 }

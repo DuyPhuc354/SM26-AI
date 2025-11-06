@@ -1,6 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { SM_TACTICS_GUIDE_CONTEXT, PLAYER_ROLE_DESCRIPTIONS, POSITION_TO_ROLES_MAP } from "../constants";
-import type { TacticSuggestion, MatchPrediction, PlayerRoleSuggestion, DetailedTactic, MatchData, TacticImprovementSuggestion } from "../types";
+import type { TacticSuggestion, MatchPrediction, PlayerRoleSuggestion, DetailedTactic, MatchData, TacticImprovementSuggestion, OptimizedTacticCandidate } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
@@ -301,127 +301,96 @@ export const getPlayerRoleSuggestion = async (playerDescription: string, positio
     }
 };
 
-const improvementSchema = {
-    type: Type.OBJECT,
-    properties: {
-      analysis: { type: Type.STRING, description: "A summary of the team's performance based on match history, identifying key weaknesses revealed by the data. Focus on why the Pitch Control score is what it is." },
-      suggestedChanges: {
-        type: Type.OBJECT,
-        properties: {
-          general: { type: Type.STRING, description: "Suggested change to ONE General instruction. e.g., 'Change Width from Wide to Normal to be more compact.'" },
-          attack: { type: Type.STRING, description: "Suggested change to ONE Attack instruction." },
-          defence: { type: Type.STRING, description: "Suggested change to ONE Defence instruction." },
-          keyRoles: { type: Type.STRING, description: "Suggested change to ONE or TWO key player roles. e.g., 'Switch Box-to-box Midfielder to a Ball-Winning Midfielder.'" },
-        },
-      },
-      justification: { type: Type.STRING, description: "Detailed reasoning for why these specific changes will improve performance and increase the average Pitch Control score, directly referencing the performance analysis." },
+const tacticImprovementSchema = {
+  type: Type.OBJECT,
+  properties: {
+    analysis: {
+      type: Type.STRING,
+      description: "A detailed analysis of the tactic's performance based on match history, focusing on strengths and weaknesses. Mention Pitch Control scores."
     },
-    required: ["analysis", "suggestedChanges", "justification"],
+    suggestedChanges: {
+      type: Type.OBJECT,
+      properties: {
+        general: { type: Type.STRING, description: "A string describing the suggested changes to general instructions (e.g., 'Mentality: Attacking; Tempo: Fast'). Only include if changes are needed." },
+        attack: { type: Type.STRING, description: "A string describing suggested changes to attack instructions. Only include if changes are needed." },
+        defence: { type: Type.STRING, description: "A string describing suggested changes to defence instructions. Only include if changes are needed." },
+        keyRoles: { type: Type.STRING, description: "A string describing suggested changes to player roles (e.g., 'MC: Box-to-box; MC: Playmaker'). Only include if changes are needed." },
+      },
+    },
+    justification: {
+      type: Type.STRING,
+      description: "A detailed justification for why these specific changes will improve the tactic's performance, referencing the SM26 meta."
+    }
+  },
+  required: ["analysis", "suggestedChanges", "justification"],
 };
+
+
+export const getTacticImprovementSuggestion = async (tactic: DetailedTactic, matchHistory: MatchData[]): Promise<TacticImprovementSuggestion> => {
+  const relevantMatches = matchHistory.filter(m => m.tacticUsed === tactic.tacticName);
   
-export const getTacticImprovementSuggestion = async (
-    tacticToImprove: DetailedTactic,
-    historicalTactics: DetailedTactic[],
-    history: MatchData[],
-    detailLevel: 'full' | 'scores_only' = 'full'
-): Promise<TacticImprovementSuggestion> => {
-    const tactic = tacticToImprove;
-    const relevantHistory = history.filter(m => m.tacticUsed === tactic.tacticName);
+  if (relevantMatches.length < 3) {
+      throw new Error("At least 3 matches with this tactic are needed for a meaningful analysis.");
+  }
 
-    if (relevantHistory.length < 3 && historicalTactics.length === 0) {
-        throw new Error("Not enough match data. Please log at least 3 matches for the latest version, or include previous versions in the analysis.");
-    }
+  const historySummary = relevantMatches.map(m => 
+      `vs ${m.opponent}: ${m.score}, Poss: ${m.possession}%, Pitch Control: ${m.pitchControl ?? 'N/A'}%, Shots: ${m.shots}(${m.shotsOnTarget})`
+  ).join('\n');
 
-    const formatMatchSummary = (m: MatchData) => {
-        if (detailLevel === 'scores_only') {
-            return `vs ${m.opponent}: ${m.score}`;
-        }
-        return `vs ${m.opponent}: ${m.score}, Poss: ${m.possession}%, Pitch Control: ${m.pitchControl ?? 'N/A'}%, Shots: ${m.shots}(${m.shotsOnTarget})`;
-    };
+  const prompt = `
+  CONTEXT:
+  You are an expert Soccer Manager 2026 tactical analyst. Your task is to analyze a tactic and its match results to provide specific, actionable improvement suggestions.
+  A key metric, "Pitch Control", represents overall dominance. Your primary goal is to suggest changes that will increase this score.
+  You MUST adhere strictly to the valid instructions and roles defined in the guide below.
 
-    const historySummary = relevantHistory.map(formatMatchSummary).join('; ');
+  --- TACTICAL GUIDE ---
+  ${SM_TACTICS_GUIDE_CONTEXT}
+  --- END GUIDE ---
 
-    let evolutionPrompt = '';
-    if (historicalTactics.length > 0) {
-        evolutionPrompt = `\n--- TACTIC EVOLUTION HISTORY ---\n`;
-        evolutionPrompt += `The user is providing the history of previous versions of this tactic. Analyze the changes between versions and their impact on performance to avoid repeating past mistakes and build on successes.\n\n`;
-        
-        const sortedHistoricalTactics = [...historicalTactics].sort((a,b) => a.tacticName.localeCompare(b.tacticName, undefined, { numeric: true }));
-        
-        for (const historicalTactic of sortedHistoricalTactics) {
-            evolutionPrompt += `VERSION: ${historicalTactic.tacticName}\n`;
-            evolutionPrompt += `- Key Roles: ${historicalTactic.keyRoles}\n`;
-            evolutionPrompt += `- General: ${historicalTactic.generalInstructions}\n`;
-            evolutionPrompt += `- Attack: ${historicalTactic.attackInstructions}\n`;
-            evolutionPrompt += `- Defence: ${historicalTactic.defenceInstructions}\n`;
+  TACTIC TO ANALYZE:
+  - Name: ${tactic.tacticName}
+  - Formation: ${tactic.formation}
+  - General: ${tactic.generalInstructions}
+  - Attack: ${tactic.attackInstructions}
+  - Defence: ${tactic.defenceInstructions}
+  - Roles: ${tactic.keyRoles}
 
-            const historicalMatches = history.filter(m => m.tacticUsed === historicalTactic.tacticName);
-            if (historicalMatches.length > 0) {
-                const historicalMatchSummary = historicalMatches.map(formatMatchSummary).join('; ');
-                evolutionPrompt += `  - RESULTS: ${historicalMatchSummary}\n\n`;
-            } else {
-                evolutionPrompt += `  - RESULTS: No matches logged for this version.\n\n`;
-            }
-        }
-    }
+  MATCH HISTORY FOR THIS TACTIC:
+  ${historySummary}
 
-    const historyPromptSection = detailLevel === 'scores_only'
-        ? `LATEST VERSION MATCH RESULTS (scores only):`
-        : `LATEST VERSION MATCH HISTORY (full details):`;
+  ---
+  INSTRUCTIONS:
 
+  **CRITICAL RULE: You MUST NOT change the formation (${tactic.formation}). All suggestions must be within the existing formation.**
 
-    const prompt = `
-    CONTEXT:
-    You are an expert Soccer Manager 2026 tactical analyst. Your task is to analyze a tactic and its match results to provide concrete improvement suggestions.
-    A new key metric, "Pitch Control", has been introduced. It is calculated from possession, shots, and score, representing overall dominance. A higher score is better. Your primary goal is to suggest changes that will increase the team's average Pitch Control score.
-    You MUST adhere strictly to the valid instructions and roles defined in the guide below. Do not invent new roles or instruction values.
+  1.  **Analyze Performance:** Based on the provided match history, write a concise analysis of the tactic's strengths and weaknesses. Focus on why the "Pitch Control" score might be high or low.
+  2.  **Suggest Specific Changes:** Identify 1-3 specific, high-impact changes to the tactic's instructions (General, Attack, Defence) or player roles (Key Roles). Present these changes as strings of key-value pairs separated by semicolons (e.g., 'Mentality: Attacking; Tempo: Fast' or 'MC: Advanced Playmaker; FC: Finisher').
+  3.  **Provide Justification:** Explain *why* these changes will improve performance, referencing the match data and the SM26 meta from the guide.
+  `;
+  
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-pro",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: tacticImprovementSchema,
+        temperature: 0.6,
+        thinkingConfig: { thinkingBudget: 24576 }
+      },
+    });
 
-    --- TACTICAL GUIDE ---
-    ${SM_TACTICS_GUIDE_CONTEXT}
-    --- END GUIDE ---
-    ${evolutionPrompt}
-    TACTIC TO ANALYZE (LATEST VERSION):
-    - Name: ${tactic.tacticName}
-    - Formation: ${tactic.formation}
-    - Key Roles: ${tactic.keyRoles}
-    - General: ${tactic.generalInstructions}
-    - Attack: ${tactic.attackInstructions}
-    - Defence: ${tactic.defenceInstructions}
+    const rawText = response.text;
+    if (!rawText) throw new Error("Received an empty response from the API.");
+    const jsonText = extractJson(rawText);
+    return JSON.parse(jsonText) as TacticImprovementSuggestion;
 
-    ${historyPromptSection}
-    ${historySummary}
-
-    INSTRUCTIONS:
-    1.  **Primary Goal**: Your main objective is to suggest changes that will increase the "Pitch Control" score.
-    2.  **Analyze Full History**: If a 'TACTIC EVOLUTION HISTORY' is provided, you MUST analyze the changes from one version to the next and how those changes impacted results, especially the Pitch Control score.
-    3.  **Analyze Latest Performance**: Based on the match data for the LATEST VERSION, identify its main weaknesses, focusing on factors that lower the Pitch Control score (e.g., low possession, few shots, conceding goals).
-    4.  **Suggest Evolutionary Changes**: Propose a few (1-4) specific, high-impact changes for the LATEST VERSION. These suggestions should represent the logical next step in the tactic's evolution, directly addressing the latest performance issues while respecting the historical context.
-    5.  **Justify Your Suggestions**: Explain *why* your proposed changes are the correct next step to improve the Pitch Control score. Directly reference the performance of the latest version and explicitly state how the changes learn from the successes or failures of the transitions between previous versions.
-    `;
-
-    try {
-        const response = await ai.models.generateContent({
-            model: "gemini-2.5-pro",
-            contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: improvementSchema,
-                temperature: 0.5,
-                thinkingConfig: { thinkingBudget: 32768 },
-            },
-        });
-
-        const rawText = response.text;
-        if (!rawText) throw new Error("Received an empty response from the API.");
-        
-        const jsonText = extractJson(rawText);
-        return JSON.parse(jsonText) as TacticImprovementSuggestion;
-
-    } catch (error) {
-        console.error("Error calling Gemini API for tactic improvement:", error);
-        throw new Error("Failed to generate tactic improvement suggestion.");
-    }
+  } catch (error) {
+    console.error("Error calling Gemini API for tactic improvement:", error);
+    throw new Error("Failed to generate tactic improvement suggestion.");
+  }
 };
+
 
 const matchImageAnalysisSchema = {
     type: Type.ARRAY,
@@ -678,5 +647,82 @@ export const transcribeAudio = async (audioData: {mimeType: string, data: string
     } catch (error) {
         console.error("Error calling Gemini API for audio transcription:", error);
         throw new Error("Failed to transcribe audio with Gemini API.");
+    }
+};
+
+const optimizedTacticSchema = {
+    type: Type.OBJECT,
+    properties: {
+        topCandidates: {
+            type: Type.ARRAY,
+            description: "An array of the top 3-5 tactic configurations found by the optimization process.",
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    predictedPciScore: { type: Type.NUMBER, description: "The predicted Pitch Control Index (PCI) score for this tactic, from 0 to 100." },
+                    tactic: responseSchema // Re-use the existing tactic suggestion schema
+                },
+                required: ["predictedPciScore", "tactic"]
+            }
+        }
+    },
+    required: ["topCandidates"],
+};
+
+export const getOptimizedTactics = async (matchHistory: MatchData[]): Promise<OptimizedTacticCandidate[]> => {
+    if (matchHistory.length < 20) {
+        throw new Error("At least 20 matches are needed to train the model for optimization.");
+    }
+    
+    const historySummary = matchHistory.map(m =>
+        `vs ${m.opponent}: ${m.score} using ${m.tacticUsed}. PCI: ${m.pitchControl ?? 'N/A'}`
+    ).join('\n');
+
+    const prompt = `
+    You are an advanced AI Tactic Optimization pipeline for Soccer Manager 2026. Your goal is to find the absolute best tactical configurations by simulating a machine learning workflow.
+
+    **Workflow Description:**
+    1.  **Surrogate Model Training:** You will first analyze the provided match history to build a "surrogate model". This model learns the complex relationship between various tactical settings (formation, player roles, team instructions) and the resulting Pitch Control Index (PCI), which is the primary metric for success.
+    2.  **Genetic Algorithm Search:** After training, you will simulate a genetic algorithm (GA) to intelligently search the vast space of possible tactics. The GA will evolve a population of tactics over several generations, constantly seeking configurations that your surrogate model predicts will yield the highest possible PCI. You will apply constraints to ensure the generated tactics are logical (e.g., a high defensive line should use a sweeper keeper).
+    3.  **Return Top Candidates:** After the optimization process, you will return the top 3-5 elite tactic candidates that the GA discovered.
+
+    **Provided Match History for Model Training:**
+    ${historySummary}
+
+    **Tactical Search Space (Valid Options for GA):**
+    Use the comprehensive options and role synergies defined in the SM26 guide context.
+    ${SM_TACTICS_GUIDE_CONTEXT}
+
+    **INSTRUCTIONS:**
+    Act as the described ML pipeline. Analyze the history, simulate the training and GA optimization, and return a JSON object containing the top 3-5 candidates you've found. Each candidate must include its predicted PCI score and the full tactic details.
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-pro",
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: optimizedTacticSchema,
+                temperature: 0.8, // Higher temp for more creative exploration in GA
+                thinkingConfig: { thinkingBudget: 32768 },
+            },
+        });
+
+        const rawText = response.text;
+        if (!rawText) throw new Error("Received an empty response from the API.");
+        
+        const jsonText = extractJson(rawText);
+        const parsedJson = JSON.parse(jsonText);
+
+        if (!parsedJson.topCandidates || !Array.isArray(parsedJson.topCandidates)) {
+            throw new Error("API response did not contain the expected 'topCandidates' array.");
+        }
+
+        return parsedJson.topCandidates as OptimizedTacticCandidate[];
+
+    } catch (error) {
+        console.error("Error calling Gemini API for tactic optimization:", error);
+        throw new Error("Failed to generate optimized tactics from Gemini API.");
     }
 };

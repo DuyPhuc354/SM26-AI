@@ -1,7 +1,7 @@
-
 import React, { useState, useEffect, useRef } from 'react';
-import type { DetailedTactic } from '../types';
+import type { DetailedTactic, MatchData, TacticImprovementSuggestion } from '../types';
 import { AccordionItem } from './Accordion';
+import { Tooltip } from './Tooltip';
 
 const ShareTacticModal: React.FC<{tactic: DetailedTactic, onClose: () => void}> = ({ tactic, onClose }) => {
   const [textCopied, setTextCopied] = useState(false);
@@ -130,6 +130,29 @@ const CompareTactics: React.FC<{tactic1: DetailedTactic, tactic2: DetailedTactic
   )
 }
 
+const StarRating: React.FC<{rating: number, onRate: (rating: number) => void}> = ({ rating, onRate }) => {
+  const [hoverRating, setHoverRating] = useState(0);
+  return (
+    <div className="flex items-center" onMouseLeave={() => setHoverRating(0)}>
+      {[1, 2, 3, 4, 5].map(star => (
+        <svg
+          key={star}
+          className={`w-5 h-5 cursor-pointer transition-colors ${
+            (hoverRating || rating) >= star ? 'text-yellow-400' : 'text-gray-600'
+          }`}
+          fill="currentColor"
+          viewBox="0 0 20 20"
+          onClick={(e) => { e.stopPropagation(); onRate(star); }}
+          onMouseEnter={() => setHoverRating(star)}
+        >
+          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+        </svg>
+      ))}
+    </div>
+  );
+};
+
+
 const TacticActions: React.FC<{
     tactic: DetailedTactic;
     isSaved: boolean;
@@ -140,8 +163,13 @@ const TacticActions: React.FC<{
     onToggleFavorite?: (name: string) => void;
     isSelected: boolean;
     isSelectionDisabled: boolean;
-}> = ({ tactic, isSaved, onDelete, onShare, onExport, onSelect, onToggleFavorite, isSelected, isSelectionDisabled }) => (
+    onImproveTactic: (tactic: DetailedTactic) => void;
+    matchCount: number;
+    avgRating: number;
+    onRate: (name: string, rating: number) => void;
+}> = ({ tactic, isSaved, onDelete, onShare, onExport, onSelect, onToggleFavorite, isSelected, isSelectionDisabled, onImproveTactic, matchCount, avgRating, onRate }) => (
     <div className="flex items-center gap-x-2">
+        {isSaved && <StarRating rating={avgRating} onRate={(r) => onRate(tactic.tacticName, r)} />}
         <button onClick={() => { onShare(tactic); navigator.vibrate?.(20); }} className="text-gray-400 hover:text-blue-400 transition-colors" aria-label={`Share ${tactic.tacticName}`}>
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 10.895-1.789l-4.94-2.47a3.027 3.027 0 000-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z" /></svg>
         </button>
@@ -150,6 +178,20 @@ const TacticActions: React.FC<{
                 <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
             </svg>
         </button>
+        {isSaved && onImproveTactic && (
+            <Tooltip text={matchCount < 3 ? `Log at least 3 matches to enable AI analysis` : `Analyze and improve this tactic (${matchCount} logged)`}>
+                <button
+                    onClick={() => onImproveTactic(tactic)}
+                    disabled={matchCount < 3}
+                    className="text-gray-400 hover:text-purple-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    aria-label={`Improve ${tactic.tacticName}`}
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 14.464A1 1 0 106.465 13.05l-.707-.707a1 1 0 00-1.414 1.414l.707.707zm-1.414-2.12a1 1 0 011.414 0l.707.707a1 1 0 11-1.414 1.414l-.707-.707a1 1 0 010-1.414zM4 11a1 1 0 100-2H3a1 1 0 100 2h1z" />
+                    </svg>
+                </button>
+            </Tooltip>
+        )}
         {isSaved && onToggleFavorite && (
             <button onClick={() => { onToggleFavorite(tactic.tacticName); navigator.vibrate?.(20); }} className="text-gray-400 hover:text-yellow-400 transition-colors" aria-label={`Favorite ${tactic.tacticName}`}>
                 {tactic.isFavorite ? (
@@ -158,7 +200,7 @@ const TacticActions: React.FC<{
                     </svg>
                 ) : (
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.783-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976-2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.783-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                     </svg>
                 )}
             </button>
@@ -185,48 +227,69 @@ const TacticCard: React.FC<{
   onToggleFavorite?: (name: string) => void;
   isSelected: boolean;
   isSelectionDisabled: boolean;
-}> = ({ tactic, isSaved, onDelete, onShare, onExport, onSelect, onToggleFavorite, isSelected, isSelectionDisabled }) => (
-  <div className={`bg-gray-800/80 p-4 rounded-lg border transition-colors ${tactic.isFavorite ? 'border-yellow-500/50' : 'border-gray-700/80'}`}>
+  onImproveTactic: (tactic: DetailedTactic) => void;
+  matchCount: number;
+  avgRating: number;
+  onRate: (name: string, rating: number) => void;
+}> = (props) => (
+  <div className={`bg-gray-800/80 p-4 rounded-lg border transition-colors ${props.tactic.isFavorite ? 'border-yellow-500/50' : 'border-gray-700/80'}`}>
     <div className="flex justify-between items-start">
-      <h3 className="text-lg font-bold text-white mb-2 pr-2">
-        {tactic.isFavorite && <span className="text-yellow-400" aria-label="Favorite">★ </span>}
-        {tactic.tacticName} - <span className="text-[var(--color-text-accent)]">{tactic.formation}</span>
-      </h3>
-      <TacticActions {...{tactic, isSaved, onDelete, onShare, onExport, onSelect, onToggleFavorite, isSelected, isSelectionDisabled}}/>
+      <div className="pr-2">
+        <h3 className="text-lg font-bold text-white mb-1">
+            {props.tactic.isFavorite && <span className="text-yellow-400" aria-label="Favorite">★ </span>}
+            {props.tactic.tacticName} - <span className="text-[var(--color-text-accent)]">{props.tactic.formation}</span>
+        </h3>
+        {props.isSaved && props.tactic.ratings && props.tactic.ratings.length > 0 && (
+             <div className="flex items-center gap-x-1">
+                <StarRating rating={props.avgRating} onRate={() => {}} />
+                <span className="text-xs text-gray-400 ml-1">({props.avgRating.toFixed(1)} from {props.tactic.ratings.length} ratings)</span>
+            </div>
+        )}
+      </div>
+      <TacticActions {...props}/>
     </div>
     
     <div className="mt-2 border-t border-gray-700 pt-3">
       <h4 className="font-semibold text-gray-200 mb-1">Player Roles:</h4>
-      <p className="text-sm text-gray-300">{tactic.keyRoles}</p>
+      <p className="text-sm text-gray-300">{props.tactic.keyRoles}</p>
     </div>
 
     <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm border-t border-gray-700 pt-3">
-        <div><h5 className="font-semibold text-gray-300">General</h5><p className="text-gray-400">{tactic.generalInstructions}</p></div>
-        <div><h5 className="font-semibold text-gray-300">Attack</h5><p className="text-gray-400">{tactic.attackInstructions}</p></div>
-        <div><h5 className="font-semibold text-gray-300">Defence</h5><p className="text-gray-400">{tactic.defenceInstructions}</p></div>
+        <div><h5 className="font-semibold text-gray-300">General</h5><p className="text-gray-400">{props.tactic.generalInstructions}</p></div>
+        <div><h5 className="font-semibold text-gray-300">Attack</h5><p className="text-gray-400">{props.tactic.attackInstructions}</p></div>
+        <div><h5 className="font-semibold text-gray-300">Defence</h5><p className="text-gray-400">{props.tactic.defenceInstructions}</p></div>
     </div>
     
     <div className="mt-4 border-t border-gray-700 pt-3">
       <h4 className="font-semibold text-gray-200 mb-1">Best For / Tips:</h4>
-      <p className="text-sm text-gray-300">{tactic.bestForTips}</p>
+      <p className="text-sm text-gray-300">{props.tactic.bestForTips}</p>
     </div>
   </div>
 );
 
-const TacticRow: React.FC<any> = ({ tactic, isSaved, onDelete, onShare, onExport, onSelect, onToggleFavorite, isSelected, isSelectionDisabled }) => (
-    <div className={`flex items-center justify-between p-2 rounded-md hover:bg-gray-800/50 text-sm transition-colors ${tactic.isFavorite ? 'bg-yellow-900/20' : ''}`}>
-        <div className="flex-1 min-w-0 flex items-center">
-            {tactic.isFavorite && <span className="text-yellow-400 mr-2" aria-label="Favorite">★</span>}
-            <div>
-                <p className="font-bold text-white truncate">{tactic.tacticName}</p>
-                <p className="text-gray-400">{tactic.formation}</p>
+const TacticRow: React.FC<any> = (props) => {
+    const { tactic, avgRating } = props;
+    return (
+        <div className={`flex items-center justify-between p-2 rounded-md hover:bg-gray-800/50 text-sm transition-colors ${tactic.isFavorite ? 'bg-yellow-900/20' : ''}`}>
+            <div className="flex-1 min-w-0 flex items-center gap-x-3">
+                {tactic.isFavorite && <span className="text-yellow-400" aria-label="Favorite">★</span>}
+                <div>
+                    <p className="font-bold text-white truncate">{tactic.tacticName}</p>
+                    <p className="text-gray-400">{tactic.formation}</p>
+                </div>
+                 {props.isSaved && tactic.ratings && tactic.ratings.length > 0 && (
+                     <div className="flex items-center gap-x-1">
+                        <StarRating rating={avgRating} onRate={() => {}} />
+                        <span className="text-xs text-gray-400">({avgRating.toFixed(1)})</span>
+                    </div>
+                )}
+            </div>
+            <div className="flex-shrink-0">
+                <TacticActions {...props}/>
             </div>
         </div>
-        <div className="flex-shrink-0">
-            <TacticActions {...{tactic, isSaved, onDelete, onShare, onExport, onSelect, onToggleFavorite, isSelected, isSelectionDisabled}}/>
-        </div>
-    </div>
-);
+    )
+};
 
 export const TacticsLibrary: React.FC<{
   communityTactics: DetailedTactic[];
@@ -234,7 +297,11 @@ export const TacticsLibrary: React.FC<{
   onDeleteTactic: (tacticName: string) => void;
   onToggleFavorite: (tacticName: string) => void;
   onOpenImporter: () => void;
-}> = ({ communityTactics, savedTactics, onDeleteTactic, onToggleFavorite, onOpenImporter }) => {
+  matchHistory: MatchData[];
+  onSaveTactic: (tactic: DetailedTactic) => void;
+  onRateTactic: (tacticName: string, rating: number) => void;
+  onImproveTactic: (tactic: DetailedTactic) => void;
+}> = ({ communityTactics, savedTactics, onDeleteTactic, onToggleFavorite, onOpenImporter, matchHistory, onSaveTactic, onRateTactic, onImproveTactic }) => {
   const [selectedToCompare, setSelectedToCompare] = useState<DetailedTactic[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
@@ -297,34 +364,42 @@ export const TacticsLibrary: React.FC<{
   };
 
   const TacticComponent = viewMode === 'card' ? TacticCard : TacticRow;
-  const commonTacticProps = (tactic: DetailedTactic, isSaved: boolean) => ({
-      key: tactic.tacticName,
-      tactic,
-      isSaved,
-      onDelete: isSaved ? onDeleteTactic : undefined,
-      onShare: setTacticToShare,
-      onExport: handleExportTactic,
-      onSelect: handleSelectTactic,
-      onToggleFavorite: isSaved ? onToggleFavorite : undefined,
-      isSelected: !!selectedToCompare.find(t => t.tacticName === tactic.tacticName),
-      isSelectionDisabled: selectedToCompare.length >= 2,
-  });
+  const commonTacticProps = (tactic: DetailedTactic, isSaved: boolean) => {
+      const matchCount = matchHistory.filter(m => m.tacticUsed === tactic.tacticName).length;
+      const avgRating = tactic.ratings && tactic.ratings.length > 0
+        ? tactic.ratings.reduce((a, b) => a + b, 0) / tactic.ratings.length
+        : 0;
+      return {
+          key: tactic.tacticName,
+          tactic,
+          isSaved,
+          onDelete: isSaved ? onDeleteTactic : undefined,
+          onShare: setTacticToShare,
+          onExport: handleExportTactic,
+          onSelect: handleSelectTactic,
+          onToggleFavorite: isSaved ? onToggleFavorite : undefined,
+          isSelected: !!selectedToCompare.find(t => t.tacticName === tactic.tacticName),
+          isSelectionDisabled: selectedToCompare.length >= 2,
+          onImproveTactic: onImproveTactic,
+          matchCount,
+          avgRating,
+          onRate: onRateTactic,
+      }
+  };
 
   const filterCommunityTactics = (tactics: DetailedTactic[]) => tactics.filter(tactic =>
     tactic.tacticName.toLowerCase().includes(searchQuery.toLowerCase()) ||
     tactic.formation.toLowerCase().includes(searchQuery.toLowerCase())
   );
   
-  // 1. Filter tactics based on search and favorite toggle
   const filteredTactics = savedTactics.filter(tactic =>
     (tactic.tacticName.toLowerCase().includes(searchQuery.toLowerCase()) ||
      tactic.formation.toLowerCase().includes(searchQuery.toLowerCase())) &&
     (!showFavoritesOnly || tactic.isFavorite)
   );
 
-  // 2. Group the filtered tactics by base name
-  // FIX: The original `reduce` call was causing type inference issues. By casting the initial value `{}`, we ensure `groupedTactics` is correctly typed, which resolves all related downstream errors.
-  const groupedTactics = filteredTactics.reduce((acc, tactic) => {
+  // FIX: Explicitly typed the accumulator and initial value for the `reduce` function. The previous generic type argument on `reduce` caused a compiler error in some environments. This more explicit approach correctly types `groupedTactics` and resolves downstream errors when accessing properties like `.length` or `.sort`.
+  const groupedTactics = filteredTactics.reduce((acc: Record<string, DetailedTactic[]>, tactic) => {
       const baseName = tactic.tacticName.replace(/\s+v\d+(\.\d+)?$/, '').trim();
       if (!acc[baseName]) {
           acc[baseName] = [];
@@ -333,7 +408,6 @@ export const TacticsLibrary: React.FC<{
       return acc;
   }, {} as Record<string, DetailedTactic[]>);
 
-  // 3. Create an array of groups and sort them (favorites first, then alphabetically)
   const sortedGroupEntries = Object.entries(groupedTactics).sort(([baseNameA, tacticsA], [baseNameB, tacticsB]) => {
       const hasFavoriteA = tacticsA.some(t => t.isFavorite);
       const hasFavoriteB = tacticsB.some(t => t.isFavorite);
