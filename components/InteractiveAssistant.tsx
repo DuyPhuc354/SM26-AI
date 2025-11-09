@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { getTacticSuggestion } from '../services/geminiService';
 import type { TacticSuggestion, DetailedTactic, MatchData } from '../types';
@@ -365,7 +364,14 @@ export const InteractiveAssistant: React.FC<InteractiveAssistantProps> = ({ onSa
     }
   };
 
-  const handleImport = (tactic: DetailedTactic) => {
+  const handleImport = (tactics: DetailedTactic[]) => {
+    if (tactics.length === 0) return;
+    
+    const tactic = tactics[0]; // Take the first one
+    if (tactics.length > 1) {
+         alert("Multiple tactics were imported, but only the first one can be loaded for editing.");
+    }
+
     const suggestion = convertDetailedTacticToSuggestion(tactic);
     const copiedSuggestion = deepCopy(suggestion);
 

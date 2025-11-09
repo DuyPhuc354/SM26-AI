@@ -8,7 +8,12 @@ const getGreeting = () => {
   return "Good evening";
 };
 
-export const Header: React.FC = () => {
+interface HeaderProps {
+  activeProfileName: string;
+  onSwitchProfile: () => void;
+}
+
+export const Header: React.FC<HeaderProps> = ({ activeProfileName, onSwitchProfile }) => {
   const [greeting, setGreeting] = useState('');
 
   useEffect(() => {
@@ -25,11 +30,21 @@ export const Header: React.FC = () => {
             </svg>
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-white tracking-wider">Soccer Manager 2026</h1>
+            <h1 className="text-3xl font-bold text-white tracking-wider">
+              {activeProfileName}
+            </h1>
             <p className="text-[var(--color-text-accent)]">{greeting}, ready for a tactical masterclass?</p>
           </div>
         </div>
-        <ThemeSwitcher />
+        <div className="flex items-center space-x-4">
+          <button
+            onClick={onSwitchProfile}
+            className="text-sm bg-gray-700 hover:bg-gray-600 text-gray-300 font-semibold py-1 px-3 rounded-md transition-colors"
+          >
+            Switch Profile
+          </button>
+          <ThemeSwitcher />
+        </div>
       </div>
     </header>
   );

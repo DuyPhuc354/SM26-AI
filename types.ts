@@ -109,6 +109,19 @@ export interface OptimizedTacticCandidate {
   tactic: TacticSuggestion;
 }
 
+export interface TacticGroup {
+  id: string;
+  name: string;
+  tacticNames: string[];
+}
+
+export interface ProfileData {
+  savedTactics: DetailedTactic[];
+  matchHistory: MatchData[];
+  aiKnowledge: string;
+  tacticGroups?: TacticGroup[];
+}
+
 
 // FIX: Updated props for MatchPerformanceTracker to align with its usage.
 // This resolves type errors where the component was passed `onShowEvolutionReport`
@@ -116,11 +129,11 @@ export interface OptimizedTacticCandidate {
 export interface MatchPerformanceTrackerProps {
   matchHistory: MatchData[];
   allTactics: DetailedTactic[];
-  onAddMatch: (match: Omit<MatchData, 'id' | 'matchNumber'>) => void;
+  onAddMatch: (match: Omit<MatchData, 'id' | 'number'>) => void;
   onDeleteMatch: (matchId: string) => void;
   onClearHistory: () => void;
   onUpdateKnowledge: (newKnowledge: string) => void;
-  onAddMatches: (matches: Omit<MatchData, 'id' | 'matchNumber'>[]) => void;
+  onAddMatches: (matches: Omit<MatchData, 'id' | 'number'>[]) => void;
   onOpenHistoryImporter: () => void;
   onRequestImprovement: (tactic: DetailedTactic) => void;
 }
