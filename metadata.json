@@ -1,6 +1,6 @@
 {
-  "name": "Soccer Manager 2026 Tactics Assistant (Official App)",
-  "description": "An interactive guide to help users understand and create effective tactics for Soccer Manager 2026, featuring an AI assistant to provide personalized suggestions.",
+  "name": "Soccer Manager 2026 Tactics Assistant (RAG Enabled)",
+  "description": "An interactive guide with local RAG memory and Google Drive cloud sync for Soccer Manager 2026.",
   "requestFramePermissions": [
     "microphone"
   ]
